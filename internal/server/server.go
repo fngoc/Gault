@@ -1,0 +1,117 @@
+package server
+
+import (
+	"Gault/internal/db"
+	"Gault/pkg/logger"
+	"Gault/pkg/utils"
+	"context"
+	"fmt"
+	"net"
+
+	"google.golang.org/grpc/metadata"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	pb "Gault/api/pb/api/proto"
+)
+
+type GaultService struct {
+	pb.UnimplementedAuthServiceServer
+	pb.UnimplementedDataServiceServer
+	rep db.Repository
+}
+
+func (g *GaultService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	isCreate, err := g.rep.IsUserCreated(ctx, req.GetLogin())
+	if err != nil {
+		return nil, err
+	}
+	if !isCreate {
+		return nil, status.Errorf(codes.PermissionDenied, "login failed")
+	}
+
+	userUID, token, err := g.rep.UpdateSessionUser(ctx, req.GetLogin(), req.GetPassword())
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.LoginResponse{Token: token, UserUid: userUID}, nil
+}
+
+func (g *GaultService) Registration(ctx context.Context, req *pb.RegistrationRequest) (*pb.RegistrationResponse, error) {
+	hash, err := utils.HashPassword(req.GetPassword())
+	if err != nil {
+		return nil, err
+	}
+
+	userUID, token, err := g.rep.CreateUser(ctx, req.GetLogin(), hash)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.RegistrationResponse{Token: token, UserUid: userUID}, nil
+}
+
+func (g *GaultService) GetUserDataList(ctx context.Context, req *pb.GetUserDataListRequest) (*pb.GetUserDataListResponse, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "metadata is not provided")
+	}
+
+	authUserUID, userUIDExists := md["useruid"]
+	if !userUIDExists || len(authUserUID) == 0 {
+		return nil, status.Error(codes.Unauthenticated, "useruid is not provided")
+	}
+	userUID := authUserUID[0]
+
+	list, err := g.rep.GetDataNameList(ctx, userUID)
+	if err != nil {
+		return nil, err
+	}
+	return list, err
+}
+
+func (g *GaultService) GetData(ctx context.Context, req *pb.GetDataRequest) (*pb.GetDataResponse, error) {
+	data, err := g.rep.GetData(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func (g *GaultService) SaveData(ctx context.Context, req *pb.SaveDataRequest) (*pb.SaveDataResponse, error) {
+	if err := g.rep.SaveData(ctx, req.GetUserUid(), req.GetType(), req.GetName(), req.GetData()); err != nil {
+		return nil, err
+	}
+	return &pb.SaveDataResponse{}, nil
+}
+
+func (g *GaultService) DeleteData(ctx context.Context, req *pb.DeleteDataRequest) (*pb.DeleteDataResponse, error) {
+	if err := g.rep.DeleteData(ctx, req.GetId()); err != nil {
+		return nil, err
+	}
+	return &pb.DeleteDataResponse{}, nil
+}
+
+var gaultServer *GaultService
+
+func Run(port int, store db.Repository) error {
+	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return err
+	}
+
+	gaultServer = &GaultService{rep: store}
+
+	s := grpc.NewServer(grpc.UnaryInterceptor(AuthInterceptor))
+	pb.RegisterAuthServiceServer(s, gaultServer)
+	pb.RegisterDataServiceServer(s, gaultServer)
+
+	logger.Log.Info("start gRPC server")
+	if err = s.Serve(listen); err != nil {
+		return err
+	}
+	return nil
+}
