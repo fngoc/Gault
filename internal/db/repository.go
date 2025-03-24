@@ -5,6 +5,7 @@ import (
 	"context"
 )
 
+// Repository интерфейс взаимодействия с хранилищем
 type Repository interface {
 	SaveData(context.Context, string, string, string, []byte) error
 	GetData(context.Context, string) (*pb.GetDataResponse, error)
@@ -14,4 +15,5 @@ type Repository interface {
 	CheckSessionUser(context.Context, string, string) bool
 	UpdateSessionUser(context.Context, string, string) (string, string, error)
 	DeleteData(context.Context, string) error
+	UpdateData(context.Context, string, []byte) error
 }

@@ -30,7 +30,7 @@ func GrpcClient(port int) (*grpc.ClientConn, error) {
 	return conn, nil
 }
 
-// TUIClient – основной вход в TUI. Создаёт приложение, pages и экран логина
+// TUIClient запуск TUI
 func TUIClient() error {
 	app := tview.NewApplication()
 	pages = tview.NewPages()

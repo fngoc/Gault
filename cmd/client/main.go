@@ -4,14 +4,23 @@ import (
 	"Gault/internal/client"
 	"Gault/internal/config"
 	"Gault/pkg/logger"
+	"fmt"
 
 	"google.golang.org/grpc"
+)
+
+var (
+	Version   = "dev"
+	BuildDate = "unknown"
 )
 
 func main() {
 	if err := logger.Initialize(); err != nil {
 		panic(err)
 	}
+
+	logger.Log.Info("Starting client")
+	logger.Log.Info(fmt.Sprintf("Version: %s, Build date: %s", Version, BuildDate))
 
 	conf, err := config.ParseConfig("client_config")
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// Store структура для работы с хранилищем данных
 type Store struct {
 	db *sql.DB
 }
@@ -36,6 +37,7 @@ func InitializePostgresDB(dbConf string) (Repository, error) {
 	return &Store{db: db}, nil
 }
 
+// createTables создание таблиц при запуске
 func createTables(db *sql.DB) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS users(
@@ -72,6 +74,7 @@ func createTables(db *sql.DB) error {
 	return nil
 }
 
+// SaveData сохранение данных
 func (s *Store) SaveData(ctx context.Context, userUID, dataType, dataName string, data []byte) error {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -84,6 +87,7 @@ func (s *Store) SaveData(ctx context.Context, userUID, dataType, dataName string
 	return nil
 }
 
+// GetData получение данных
 func (s *Store) GetData(ctx context.Context, id string) (*pb.GetDataResponse, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -112,6 +116,7 @@ func (s *Store) GetData(ctx context.Context, id string) (*pb.GetDataResponse, er
 	}, nil
 }
 
+// GetDataNameList получение листа информации о данных
 func (s *Store) GetDataNameList(ctx context.Context, userUID string) (*pb.GetUserDataListResponse, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -137,6 +142,7 @@ func (s *Store) GetDataNameList(ctx context.Context, userUID string) (*pb.GetUse
 	return &pb.GetUserDataListResponse{Items: list}, nil
 }
 
+// CreateUser создание пользователя
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (string, string, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -155,6 +161,7 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 	return userUID, token, nil
 }
 
+// IsUserCreated проверка на существование пользователя
 func (s *Store) IsUserCreated(ctx context.Context, username string) (bool, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -173,6 +180,7 @@ func (s *Store) IsUserCreated(ctx context.Context, username string) (bool, error
 	return isCreated, nil
 }
 
+// CheckSessionUser проверка сессии пользователя
 func (s *Store) CheckSessionUser(ctx context.Context, userUID, token string) bool {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -186,6 +194,7 @@ func (s *Store) CheckSessionUser(ctx context.Context, userUID, token string) boo
 	return isCreated
 }
 
+// UpdateSessionUser обновление сессии пользователя
 func (s *Store) UpdateSessionUser(ctx context.Context, username, password string) (string, string, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -209,6 +218,7 @@ func (s *Store) UpdateSessionUser(ctx context.Context, username, password string
 	return userUID, token, nil
 }
 
+// DeleteData удаление данных
 func (s *Store) DeleteData(ctx context.Context, id string) error {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
@@ -218,6 +228,16 @@ func (s *Store) DeleteData(ctx context.Context, id string) error {
 	return err
 }
 
+func (s *Store) UpdateData(ctx context.Context, id string, data []byte) error {
+	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
+	defer cancel()
+
+	query := `UPDATE user_data SET data_encrypted = $1 WHERE id = $2`
+	_, err := s.db.ExecContext(ctxDB, query, data, id)
+	return err
+}
+
+// createSessionToken создание токена для пользователя
 func (s *Store) createSessionToken(ctx context.Context, userUID string) (string, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()

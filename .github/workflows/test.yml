@@ -1,0 +1,41 @@
+name: Test and Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.23'
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc-gen-go and protoc-gen-go-grpc
+        run: |
+          go install github.com/bufbuild/buf/cmd/buf@latest
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+      - name: Generate protobuf
+        run: |
+          protoc --go_out=./api/pb --go_opt=paths=source_relative --go-grpc_out=./api/pb --go-grpc_opt=paths=source_relative api/proto/data_service.proto
+          protoc --go_out=./api/pb --go_opt=paths=source_relative --go-grpc_out=./api/pb --go-grpc_opt=paths=source_relative api/proto/auth_service.proto
+
+      - name: Run tests
+        run: |
+          go test -covermode=atomic -coverprofile=coverage.out ./internal/...
+
+      - name: Show coverage in logs
+        run: go tool cover -func=coverage.out

@@ -278,6 +278,9 @@ func showTextContentModal(app *tview.Application, userUID, token, itemID string,
 		SetTitleAlign(tview.AlignCenter)
 
 	form := tview.NewForm().
+		AddButton("Edit", func() {
+			showEditTextDialog(app, userUID, token, itemID, textData, table, message)
+		}).
 		AddButton("Delete", func() {
 			if err := deleteData(userUID, token, itemID); err != nil {
 				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Delete error: %v", err))
@@ -301,6 +304,46 @@ func showTextContentModal(app *tview.Application, userUID, token, itemID string,
 	app.SetFocus(form)
 }
 
+// showEditTextDialog модальное окно для редактирования текста
+func showEditTextDialog(app *tview.Application, userUID, token, itemID string, oldText string, table *tview.Table, message *tview.TextView) {
+	inputField := tview.NewInputField().
+		SetLabel("Edit text: ").
+		SetText(oldText).
+		SetFieldWidth(40)
+
+	dialogForm := tview.NewForm().
+		AddFormItem(inputField).
+		AddButton("Save", func() {
+			newText := inputField.GetText()
+			err := updateData(userUID, token, itemID, []byte(newText))
+			if err != nil {
+				message.SetTextColor(tcell.ColorRed).
+					SetText(fmt.Sprintf("Update error: %v", err))
+			} else {
+				message.SetTextColor(tcell.ColorGreen).
+					SetText("Update success!")
+				_ = loadUserData(table, userUID, token)
+			}
+			closeDialog("dialog_edit_text")
+			closeDialog("dialog_view_text")
+		}).
+		AddButton("Cancel", func() {
+			closeDialog("dialog_edit_text")
+		})
+
+	dialogForm.SetBorder(true).
+		SetTitle(" Edit text ").
+		SetTitleAlign(tview.AlignCenter)
+
+	dialogFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(dialogForm, 0, 1, true)
+
+	pages.AddPage("dialog_edit_text", dialogFlex, true, true)
+	pages.SwitchToPage("dialog_edit_text")
+	app.SetFocus(dialogForm)
+}
+
 // showFileContentModal модальное окно для скачивания файла
 func showFileContentModal(app *tview.Application, userUID, token, itemID string, fileData []byte, table *tview.Table, message *tview.TextView) {
 	filePathField := tview.NewInputField().
@@ -318,6 +361,9 @@ func showFileContentModal(app *tview.Application, userUID, token, itemID string,
 				message.SetTextColor(tcell.ColorGreen).SetText(fmt.Sprintf("File saved to: %s", path))
 			}
 			closeDialog("dialog_view_file")
+		}).
+		AddButton("Replace", func() {
+			showReplaceFileDialog(app, userUID, token, itemID, fileData, table, message)
 		}).
 		AddButton("Delete", func() {
 			if err := deleteData(userUID, token, itemID); err != nil {
@@ -348,6 +394,48 @@ func showFileContentModal(app *tview.Application, userUID, token, itemID string,
 	pages.AddPage("dialog_view_file", dialogFlex, true, true)
 	pages.SwitchToPage("dialog_view_file")
 	app.SetFocus(form)
+}
+
+// showReplaceFileDialog модальное окно для выбора нового файла
+func showReplaceFileDialog(app *tview.Application, userUID, token, itemID string, oldFileData []byte, table *tview.Table, message *tview.TextView) {
+	newFilePathField := tview.NewInputField().
+		SetLabel("New file path: ").
+		SetFieldWidth(40)
+
+	dialogForm := tview.NewForm().
+		AddFormItem(newFilePathField).
+		AddButton("Save", func() {
+			newPath := newFilePathField.GetText()
+			newData, err := os.ReadFile(newPath)
+			if err != nil {
+				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Failed to read file: %v", err))
+				closeDialog("dialog_replace_file")
+				return
+			}
+			if err := updateData(userUID, token, itemID, newData); err != nil {
+				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Replace error: %v", err))
+			} else {
+				message.SetTextColor(tcell.ColorGreen).SetText("File replaced!")
+				_ = loadUserData(table, userUID, token)
+			}
+			closeDialog("dialog_replace_file")
+			closeDialog("dialog_view_file")
+		}).
+		AddButton("Cancel", func() {
+			closeDialog("dialog_replace_file")
+		})
+
+	dialogForm.SetBorder(true).
+		SetTitle(" Replace file ").
+		SetTitleAlign(tview.AlignCenter)
+
+	dialogFlex := tview.NewFlex().
+		SetDirection(tview.FlexRow).
+		AddItem(dialogForm, 0, 1, true)
+
+	pages.AddPage("dialog_replace_file", dialogFlex, true, true)
+	pages.SwitchToPage("dialog_replace_file")
+	app.SetFocus(dialogForm)
 }
 
 // loadUserData загрузка данных пользователя для таблицы
@@ -392,6 +480,21 @@ func saveData(userUID, token, dataType, name string, data []byte) error {
 		Type:    dataType,
 		Name:    name,
 		Data:    data,
+	})
+	return err
+}
+
+// updateData – делает запрос на обновление данных
+func updateData(userUID, token, itemID string, data []byte) error {
+	md := metadata.Pairs(
+		"userUID", userUID,
+		"authorization", token,
+	)
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	_, err := dataClient.UpdateData(ctx, &pb.UpdateDataRequest{
+		Id:   itemID,
+		Data: data,
 	})
 	return err
 }

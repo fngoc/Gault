@@ -17,12 +17,14 @@ import (
 	pb "Gault/api/pb/api/proto"
 )
 
+// GaultService сервис взаимодействия с базой данных
 type GaultService struct {
 	pb.UnimplementedAuthServiceServer
 	pb.UnimplementedDataServiceServer
 	rep db.Repository
 }
 
+// Login метод авторизации GaultService
 func (g *GaultService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	isCreate, err := g.rep.IsUserCreated(ctx, req.GetLogin())
 	if err != nil {
@@ -40,6 +42,7 @@ func (g *GaultService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Log
 	return &pb.LoginResponse{Token: token, UserUid: userUID}, nil
 }
 
+// Registration метод регистрации GaultService
 func (g *GaultService) Registration(ctx context.Context, req *pb.RegistrationRequest) (*pb.RegistrationResponse, error) {
 	hash, err := utils.HashPassword(req.GetPassword())
 	if err != nil {
@@ -54,6 +57,7 @@ func (g *GaultService) Registration(ctx context.Context, req *pb.RegistrationReq
 	return &pb.RegistrationResponse{Token: token, UserUid: userUID}, nil
 }
 
+// GetUserDataList метод получения листа информации данных GaultService
 func (g *GaultService) GetUserDataList(ctx context.Context, req *pb.GetUserDataListRequest) (*pb.GetUserDataListResponse, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
@@ -73,6 +77,7 @@ func (g *GaultService) GetUserDataList(ctx context.Context, req *pb.GetUserDataL
 	return list, err
 }
 
+// GetData метод получения данных GaultService
 func (g *GaultService) GetData(ctx context.Context, req *pb.GetDataRequest) (*pb.GetDataResponse, error) {
 	data, err := g.rep.GetData(ctx, req.GetId())
 	if err != nil {
@@ -81,6 +86,7 @@ func (g *GaultService) GetData(ctx context.Context, req *pb.GetDataRequest) (*pb
 	return data, nil
 }
 
+// SaveData метод сохранения данных GaultService
 func (g *GaultService) SaveData(ctx context.Context, req *pb.SaveDataRequest) (*pb.SaveDataResponse, error) {
 	if err := g.rep.SaveData(ctx, req.GetUserUid(), req.GetType(), req.GetName(), req.GetData()); err != nil {
 		return nil, err
@@ -88,6 +94,7 @@ func (g *GaultService) SaveData(ctx context.Context, req *pb.SaveDataRequest) (*
 	return &pb.SaveDataResponse{}, nil
 }
 
+// DeleteData метод удаления данных GaultService
 func (g *GaultService) DeleteData(ctx context.Context, req *pb.DeleteDataRequest) (*pb.DeleteDataResponse, error) {
 	if err := g.rep.DeleteData(ctx, req.GetId()); err != nil {
 		return nil, err
@@ -95,8 +102,18 @@ func (g *GaultService) DeleteData(ctx context.Context, req *pb.DeleteDataRequest
 	return &pb.DeleteDataResponse{}, nil
 }
 
+// UpdateData метод обновления данных GaultService
+func (g *GaultService) UpdateData(ctx context.Context, req *pb.UpdateDataRequest) (*pb.UpdateDataResponse, error) {
+	if err := g.rep.UpdateData(ctx, req.GetId(), req.GetData()); err != nil {
+		return nil, err
+	}
+	return &pb.UpdateDataResponse{}, nil
+}
+
+// gaultServer инстанс сервиса
 var gaultServer *GaultService
 
+// Run запуск сервиса
 func Run(port int, store db.Repository) error {
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
