@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "Gault/api/pb/api/proto"
+	pb "Gault/gen/go/api/proto/v1"
 )
 
 // GaultService сервис взаимодействия с базой данных

@@ -13,8 +13,8 @@ import (
 
 // unprotectedMethods список методов, которые НЕ требуют аутентификации
 var unprotectedMethods = map[string]bool{
-	"/proto.AuthService/Login":        true,
-	"/proto.AuthService/Registration": true,
+	"/proto.gault.v1.AuthService/Login":        true,
+	"/proto.gault.v1.AuthService/Registration": true,
 }
 
 // AuthInterceptor проверяет токен сессии в каждом запросе

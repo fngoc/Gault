@@ -1,7 +1,7 @@
 package db
 
 import (
-	pb "Gault/api/pb/api/proto"
+	pb "Gault/gen/go/api/proto/v1"
 	"Gault/pkg/logger"
 	"Gault/pkg/utils"
 	"context"

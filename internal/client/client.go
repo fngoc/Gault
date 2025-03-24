@@ -1,7 +1,7 @@
 package client
 
 import (
-	pb "Gault/api/pb/api/proto"
+	pb "Gault/gen/go/api/proto/v1"
 	"fmt"
 
 	"github.com/rivo/tview"
