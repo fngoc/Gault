@@ -228,6 +228,7 @@ func (s *Store) DeleteData(ctx context.Context, id string) error {
 	return err
 }
 
+// UpdateData обновление данных
 func (s *Store) UpdateData(ctx context.Context, id string, data []byte) error {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()

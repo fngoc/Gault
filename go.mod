@@ -5,7 +5,9 @@ go 1.23.0
 toolchain go1.23.6
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/gdamore/tcell/v2 v2.8.1
+	github.com/golang/mock v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/rivo/tview v0.0.0-20250322200051-73a5bd7d6839
 	github.com/spf13/viper v1.20.0
