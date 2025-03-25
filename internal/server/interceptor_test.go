@@ -13,7 +13,7 @@ import (
 
 func TestAuthInterceptor_UnprotectedMethod(t *testing.T) {
 	ctx := context.Background()
-	info := &grpc.UnaryServerInfo{FullMethod: "/proto.gault.v1.AuthService/Login"}
+	info := &grpc.UnaryServerInfo{FullMethod: "/api.proto.v1.AuthService/Login"}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return "success", nil
 	}
