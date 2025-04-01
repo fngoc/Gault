@@ -84,7 +84,7 @@ func showLoginMenu(app *tview.Application) tview.Primitive {
 				return
 			}
 
-			message.SetTextColor(tcell.ColorGreen).SetText(fmt.Sprintf("Login successful!"))
+			message.SetTextColor(tcell.ColorGreen).SetText("Login successful!")
 			showDataScreen(app, response.UserUid, response.Token, message)
 		}).
 		AddButton("Register", func() {
@@ -103,7 +103,7 @@ func showLoginMenu(app *tview.Application) tview.Primitive {
 				return
 			}
 
-			message.SetTextColor(tcell.ColorGreen).SetText(fmt.Sprintf("Registration successful!"))
+			message.SetTextColor(tcell.ColorGreen).SetText("Registration successful!")
 			showDataScreen(app, response.UserUid, response.Token, message)
 		}).
 		AddButton("Exit", func() {

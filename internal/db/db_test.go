@@ -29,6 +29,7 @@ func TestInitializePostgresDB(t *testing.T) {
 	mock.ExpectPing()
 
 	_, err = InitializePostgresDB("mock-dsn")
+	assert.Error(t, err)
 }
 
 func TestSaveData(t *testing.T) {
