@@ -13,6 +13,8 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+const maxSizeBytes = 1024 * 1024 * 100 // 100 MB
+
 var (
 	pages *tview.Pages
 
@@ -25,6 +27,10 @@ func GrpcClient(port int) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		fmt.Sprintf(":%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(maxSizeBytes),
+			grpc.MaxCallSendMsgSize(maxSizeBytes),
+		),
 	)
 	if err != nil {
 		return nil, err

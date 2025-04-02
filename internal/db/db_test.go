@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -48,7 +49,22 @@ func TestSaveData(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetData(t *testing.T) {
+func TestSaveDataError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	mock.ExpectBegin()
+	ctx := context.Background()
+	mock.ExpectExec("INSERT INTO user_data").
+		WithArgs("user-uid", "type", "name", []byte("data")).
+		WillReturnError(errors.New("error"))
+	mock.ExpectRollback()
+
+	err := store.SaveData(ctx, "user-uid", "type", "name", []byte("data"))
+	assert.Error(t, err)
+}
+
+func TestGetDataText(t *testing.T) {
 	dbMock, mock, store := setupMockDB(t)
 	defer dbMock.Close()
 
@@ -62,6 +78,23 @@ func TestGetData(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "text", resp.Type)
 	assert.Equal(t, "sample data", resp.GetTextData())
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDataFile(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+	mock.ExpectQuery(`(?i)SELECT\s+data_type,\s+data_encrypted\s+FROM\s+user_data\s+WHERE\s+id\s*=\s*\$?`).
+		WithArgs("data-id").
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_encrypted"}).
+			AddRow("file", []byte("sample data")))
+
+	resp, err := store.GetData(ctx, "data-id")
+	assert.NoError(t, err)
+	assert.Equal(t, "file", resp.Type)
+	assert.Equal(t, "sample data", string(resp.GetFileData()))
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -89,6 +122,21 @@ func TestCreateUser(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestCreateUserError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	mock.ExpectBegin()
+	ctx := context.Background()
+	mock.ExpectQuery(`(?i)INSERT\s+INTO\s+users\s*\(username,\s*password_hash\)\s*VALUES\s*\(\$1,\s*\$2\)\s*RETURNING\s*id`).
+		WithArgs("testuser", "hashed-password").
+		WillReturnError(errors.New("error"))
+	mock.ExpectRollback()
+
+	_, _, err := store.CreateUser(ctx, "testuser", "hashed-password")
+	assert.Error(t, err)
+}
+
 func TestIsUserCreated(t *testing.T) {
 	dbMock, mock, store := setupMockDB(t)
 	defer dbMock.Close()
@@ -102,6 +150,20 @@ func TestIsUserCreated(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, exists)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestIsUserCreatedError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+	mock.ExpectQuery(`(?i)SELECT\s+EXISTS\s*\(SELECT\s+1\s+FROM\s+users\s+WHERE\s+username\s*=\s*\$1\)`).
+		WithArgs("testuser").
+		WillReturnError(errors.New("error"))
+
+	exists, err := store.IsUserCreated(ctx, "testuser")
+	assert.Error(t, err)
+	assert.False(t, exists)
 }
 
 func TestDeleteData(t *testing.T) {
@@ -120,6 +182,21 @@ func TestDeleteData(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDeleteDataError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	mock.ExpectBegin()
+	ctx := context.Background()
+	mock.ExpectExec(`(?i)DELETE\s+FROM\s+user_data\s+WHERE\s+id\s*=\s*\$1`).
+		WithArgs("data-id").
+		WillReturnError(errors.New("error"))
+	mock.ExpectRollback()
+
+	err := store.DeleteData(ctx, "data-id")
+	assert.Error(t, err)
+}
+
 func TestUpdateData(t *testing.T) {
 	dbMock, mock, store := setupMockDB(t)
 	defer dbMock.Close()
@@ -136,6 +213,21 @@ func TestUpdateData(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUpdateDataError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	mock.ExpectBegin()
+	ctx := context.Background()
+	mock.ExpectExec(`(?i)UPDATE\s+user_data\s+SET\s+data_encrypted\s*=\s*\$1\s+WHERE\s+id\s*=\s*\$2`).
+		WithArgs([]byte("new data"), "data-id").
+		WillReturnError(errors.New("error"))
+	mock.ExpectRollback()
+
+	err := store.UpdateData(ctx, "data-id", []byte("new data"))
+	assert.Error(t, err)
+}
+
 func TestUpdateSessionUser(t *testing.T) {
 	dbMock, mock, store := setupMockDB(t)
 	defer dbMock.Close()
@@ -143,7 +235,7 @@ func TestUpdateSessionUser(t *testing.T) {
 	ctx := context.Background()
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
-	assert.NoError(t, err) // Проверяем, что хеширование прошло успешно
+	assert.NoError(t, err)
 
 	mock.ExpectQuery(`(?i)SELECT\s+id,\s+password_hash\s+FROM\s+users\s+WHERE\s+username\s*=\s*\$1`).
 		WithArgs("testuser").
@@ -163,6 +255,44 @@ func TestUpdateSessionUser(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUpdateSessionUserError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectQuery(`(?i)SELECT\s+id,\s+password_hash\s+FROM\s+users\s+WHERE\s+username\s*=\s*\$1`).
+		WithArgs("testuser").
+		WillReturnError(errors.New("error"))
+
+	_, _, err := store.UpdateSessionUser(ctx, "testuser", "password")
+	assert.Error(t, err)
+}
+
+func TestUpdateSessionUserTxError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`(?i)SELECT\s+id,\s+password_hash\s+FROM\s+users\s+WHERE\s+username\s*=\s*\$1`).
+		WithArgs("testuser").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "password_hash"}).
+			AddRow("user-uid", string(hashedPassword)))
+
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?i)INSERT\s+INTO\s+user_sessions\s*\(user_id, session_token, expires_at\)`).
+		WithArgs("user-uid", sqlmock.AnyArg()).
+		WillReturnError(errors.New("error"))
+	mock.ExpectRollback()
+
+	_, _, err = store.UpdateSessionUser(ctx, "testuser", "password")
+	assert.Error(t, err)
+}
+
 func TestCheckSessionUser(t *testing.T) {
 	dbMock, mock, store := setupMockDB(t)
 	defer dbMock.Close()
@@ -175,6 +305,19 @@ func TestCheckSessionUser(t *testing.T) {
 	isValid := store.CheckSessionUser(ctx, "user-uid", "valid-token")
 	assert.True(t, isValid)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckSessionUserError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+	mock.ExpectQuery(`(?i)SELECT\s+EXISTS\s*\(SELECT\s+1\s+FROM\s+user_sessions\s+WHERE\s+user_id\s*=\s*\$1\s+AND\s+session_token\s*=\s*\$2\)`).
+		WithArgs("user-uid", "valid-token").
+		WillReturnError(errors.New("error"))
+
+	isValid := store.CheckSessionUser(ctx, "user-uid", "valid-token")
+	assert.False(t, isValid)
 }
 
 func TestGetDataNameList(t *testing.T) {

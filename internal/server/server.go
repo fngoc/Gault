@@ -124,7 +124,15 @@ func Run(port int, unprotectedMethods []config.EndpointRule, store db.Repository
 	gaultServer = &GaultService{rep: store}
 
 	setAllowEndpoints(unprotectedMethods)
-	s := grpc.NewServer(grpc.UnaryInterceptor(AuthInterceptor))
+
+	// Увеличенные лимиты для входящих/исходящих сообщений (100 MB)
+	serverOptions := []grpc.ServerOption{
+		grpc.UnaryInterceptor(AuthInterceptor),
+		grpc.MaxRecvMsgSize(1024 * 1024 * 100),
+		grpc.MaxSendMsgSize(1024 * 1024 * 100),
+	}
+
+	s := grpc.NewServer(serverOptions...)
 	pb.RegisterAuthV1ServiceServer(s, gaultServer)
 	pb.RegisterContentManagerV1ServiceServer(s, gaultServer)
 
