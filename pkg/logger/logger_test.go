@@ -7,6 +7,6 @@ import (
 )
 
 func TestInitialize(t *testing.T) {
-	err := Initialize()
+	err := NewLogger()
 	assert.NoError(t, err)
 }

@@ -3,14 +3,26 @@ syntax = "proto3";
 package api.proto.v1;
 
 import "api/proto/validate/validate.proto";
+import "third_party/google/api/annotations.proto";
+
 option go_package = "api/proton/v1";
 
 // gRPC-сервис для управления авторизации и регистрации
 service AuthV1Service {
   // Login функция обработчик авторизации
-  rpc Login(LoginRequest) returns (LoginResponse);
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login"
+      body: "*"
+    };
+  }
   // Registration функция обработчик регистрации
-  rpc Registration(RegistrationRequest) returns (RegistrationResponse);
+  rpc Registration(RegistrationRequest) returns (RegistrationResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/registration"
+      body: "*"
+    };
+  };
 }
 
 // Запрос на авторизацию

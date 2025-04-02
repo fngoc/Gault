@@ -3,21 +3,47 @@ syntax = "proto3";
 package api.proto.v1;
 
 import "api/proto/validate/validate.proto";
+import "third_party/google/api/annotations.proto";
 
 option go_package = "api/proton/v1";
 
 // gRPC-сервис для управления доступа к данным
 service ContentManagerV1Service {
   // GetUserDataList функция обработчик получения листа информации о данных
-  rpc GetUserDataList(GetUserDataListRequest) returns (GetUserDataListResponse);
+  rpc GetUserDataList(GetUserDataListRequest) returns (GetUserDataListResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/getDataList"
+      body: "*"
+    };
+  };
   // GetData функция обработчик получения данных
-  rpc GetData(GetDataRequest) returns (GetDataResponse);
+  rpc GetData(GetDataRequest) returns (GetDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/getData"
+      body: "*"
+    };
+  };
   // SaveData функция обработчик сохранения данных
-  rpc SaveData(SaveDataRequest) returns (SaveDataResponse);
+  rpc SaveData(SaveDataRequest) returns (SaveDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/saveData"
+      body: "*"
+    };
+  };
   // DeleteData функция обработчик удаления данных
-  rpc DeleteData(DeleteDataRequest) returns (DeleteDataResponse);
+  rpc DeleteData(DeleteDataRequest) returns (DeleteDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/deleteData"
+      body: "*"
+    };
+  };
   // UpdateData функция обновления данных
-  rpc UpdateData(UpdateDataRequest) returns (UpdateDataResponse);
+  rpc UpdateData(UpdateDataRequest) returns (UpdateDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/updateData"
+      body: "*"
+    };
+  };
 }
 
 // Запрос на получение листа информации о данных

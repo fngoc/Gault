@@ -4,3 +4,5 @@ lint:
     - STANDARD
   ignore:
     - api/proto/validate/validate.proto
+    - third_party/google/api/http.proto
+    - third_party/google/api/annotations.proto
