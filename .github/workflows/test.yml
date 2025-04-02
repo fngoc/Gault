@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests
         run: |
-          go test -covermode=atomic -coverprofile=coverage.out ./internal/...
+          go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep '/internal/')
 
       - name: Show coverage in logs
         run: go tool cover -func=coverage.out
