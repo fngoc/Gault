@@ -16,8 +16,8 @@ import (
 var (
 	pages *tview.Pages
 
-	autClient  pb.AuthServiceClient
-	dataClient pb.DataServiceClient
+	autClient  pb.AuthV1ServiceClient
+	dataClient pb.ContentManagerV1ServiceClient
 )
 
 // GrpcClient устанавливает gRPC-соединение
@@ -29,8 +29,8 @@ func GrpcClient(port int) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	autClient = pb.NewAuthServiceClient(conn)
-	dataClient = pb.NewDataServiceClient(conn)
+	autClient = pb.NewAuthV1ServiceClient(conn)
+	dataClient = pb.NewContentManagerV1ServiceClient(conn)
 	return conn, nil
 }
 
