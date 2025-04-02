@@ -9,6 +9,7 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.2.1
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/golang/mock v1.6.0
+	github.com/google/wire v0.6.0
 	github.com/lib/pq v1.10.9
 	github.com/rivo/tview v0.0.0-20250322200051-73a5bd7d6839
 	github.com/spf13/viper v1.20.0

@@ -3,8 +3,10 @@ package main
 import (
 	"Gault/cmd/client/ui"
 	"Gault/internal/config"
+	wire "Gault/internal/injector"
 	"Gault/pkg/logger"
 	"fmt"
+	"log"
 
 	"google.golang.org/grpc"
 )
@@ -15,8 +17,9 @@ var (
 )
 
 func main() {
-	if err := logger.Initialize(); err != nil {
-		panic(err)
+	err := wire.InitializeLogger()
+	if err != nil {
+		log.Fatalf("failed to init logger: %v", err)
 	}
 
 	logger.LogInfo("Starting client")

@@ -3,13 +3,16 @@ package main
 import (
 	"Gault/internal/config"
 	"Gault/internal/db"
+	wire "Gault/internal/injector"
 	"Gault/internal/server"
 	"Gault/pkg/logger"
+	"log"
 )
 
 func main() {
-	if err := logger.Initialize(); err != nil {
-		panic(err)
+	err := wire.InitializeLogger()
+	if err != nil {
+		log.Fatalf("failed to init logger: %v", err)
 	}
 
 	conf, err := config.ParseConfig("server_config")

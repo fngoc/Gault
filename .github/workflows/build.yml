@@ -29,13 +29,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler
 
-      - name: Install protoc-gen-go, protoc-gen-go-grpc and mockgen
+      - name: Install protoc-gen-go, protoc-gen-go-grpc, mockgen and wire
         run: |
           go install github.com/bufbuild/buf/cmd/buf@latest
           go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
           go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@latest
           go install github.com/golang/mock/mockgen@latest
+          go install github.com/google/wire/cmd/wire@latest
 
       - name: Generate protobuf
         run: |
@@ -47,6 +48,10 @@ jobs:
         run: |
           mockgen -source=./internal/db/repository.go -destination=./gen/go/db/repository_mock.go -package=db 
           mockgen -source=./gen/go/api/proto/v1/data_service_grpc.pb.go -destination=./gen/go/client/client_mock.go -package=client
+
+      - name: Generate wire
+        run: |
+          cd internal/injector && wire
 
       - name: Build
         run: |

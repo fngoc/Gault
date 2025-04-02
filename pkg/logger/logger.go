@@ -11,8 +11,8 @@ var log = zap.NewNop()
 // loglevel уровень логирования по умолчанию
 const loglevel = "INFO"
 
-// Initialize инициализирует синглтон логера с необходимым уровнем логирования.
-func Initialize() error {
+// NewLogger инициализирует синглтон логера с необходимым уровнем логирования.
+func NewLogger() error {
 	lvl, err := zap.ParseAtomicLevel(loglevel)
 	if err != nil {
 		return err
