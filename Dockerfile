@@ -1,11 +1,25 @@
-FROM golang:1.23-alpine
+# Этап сборки
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
+COPY go.mod ./
+COPY go.sum ./
+COPY go.sum ./
+RUN go mod download
+
 COPY . .
 
-RUN go mod download
-RUN go build -o Gault ./cmd/server/
-RUN chmod +x Gault
+RUN go build -o gault ./cmd/server/
 
-CMD ["./Gault"]
+# Этап создания обараза
+FROM alpine:latest
+
+WORKDIR /app
+
+COPY --from=builder /app/gault .
+COPY server_config.yml .
+
+RUN chmod +x gault
+
+CMD ["./gault"]

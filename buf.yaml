@@ -2,3 +2,5 @@ version: v2
 lint:
   use:
     - STANDARD
+  ignore:
+    - api/proto/validate/validate.proto

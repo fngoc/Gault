@@ -19,8 +19,8 @@ import (
 
 // GaultService сервис взаимодействия с базой данных
 type GaultService struct {
-	pb.UnimplementedAuthServiceServer
-	pb.UnimplementedDataServiceServer
+	pb.UnimplementedAuthV1ServiceServer
+	pb.UnimplementedContentManagerV1ServiceServer
 	rep db.Repository
 }
 
@@ -123,8 +123,8 @@ func Run(port int, store db.Repository) error {
 	gaultServer = &GaultService{rep: store}
 
 	s := grpc.NewServer(grpc.UnaryInterceptor(AuthInterceptor))
-	pb.RegisterAuthServiceServer(s, gaultServer)
-	pb.RegisterDataServiceServer(s, gaultServer)
+	pb.RegisterAuthV1ServiceServer(s, gaultServer)
+	pb.RegisterContentManagerV1ServiceServer(s, gaultServer)
 
 	logger.Log.Info("start gRPC server")
 	if err = s.Serve(listen); err != nil {
