@@ -1,6 +1,7 @@
 package server
 
 import (
+	"Gault/internal/config"
 	"context"
 	"testing"
 
@@ -18,6 +19,7 @@ func TestAuthInterceptor_UnprotectedMethod(t *testing.T) {
 		return "success", nil
 	}
 
+	setAllowEndpoints([]config.EndpointRule{{Path: "/api.proto.v1.AuthService/Login", Allowed: true}})
 	resp, err := AuthInterceptor(ctx, nil, info, handler)
 	assert.NoError(t, err)
 	assert.Equal(t, "success", resp)

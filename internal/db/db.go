@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -25,7 +26,7 @@ func InitializePostgresDB(dbConf string) (Repository, error) {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	if err := createTables(db); err != nil {
+	if err = createTables(db); err != nil {
 		return nil, fmt.Errorf("failed to create tables: %w", err)
 	}
 
@@ -33,44 +34,25 @@ func InitializePostgresDB(dbConf string) (Repository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
-	logger.Log.Info("connected to postgres database")
+	logger.LogInfo("connected to postgres database")
 	return &Store{db: db}, nil
 }
 
 // createTables создание таблиц при запуске
 func createTables(db *sql.DB) error {
-	query := `
-	CREATE TABLE IF NOT EXISTS users(
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		username VARCHAR(50) UNIQUE NOT NULL,
-		password_hash TEXT NOT NULL,
-		created_at TIMESTAMPTZ DEFAULT NOW(),
-		updated_at TIMESTAMPTZ DEFAULT NOW()
-	);
-	CREATE TABLE IF NOT EXISTS user_data(
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-		data_type VARCHAR(50) NOT NULL,
-		data_name VARCHAR(50) NOT NULL,
-		data_encrypted BYTEA NOT NULL,
-		created_at TIMESTAMPTZ DEFAULT NOW()
-	);
-	CREATE TABLE IF NOT EXISTS user_sessions(
-		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-		user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-		session_token TEXT UNIQUE NOT NULL,
-		expires_at TIMESTAMPTZ NOT NULL,
-		created_at TIMESTAMPTZ DEFAULT NOW()
-	);`
+	schemaBytes, err := os.ReadFile("schema.sql")
+	if err != nil {
+		return fmt.Errorf("cannot read schema.sql: %w", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	if _, err := db.ExecContext(ctx, query); err != nil {
-		return fmt.Errorf("failed to execute query: %w", err)
+	if _, err = db.ExecContext(ctx, string(schemaBytes)); err != nil {
+		return fmt.Errorf("failed to execute schema.sql: %w", err)
 	}
 
-	logger.Log.Info("database table created")
+	logger.LogInfo("database schema applied")
 	return nil
 }
 
@@ -79,11 +61,21 @@ func (s *Store) SaveData(ctx context.Context, userUID, dataType, dataName string
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	query := `INSERT INTO user_data (user_id, data_type, data_name, data_encrypted) VALUES ($1, $2, $3, $4)`
-	_, err := s.db.ExecContext(ctxDB, query, userUID, dataType, dataName, data)
+	tx, err := s.db.BeginTx(ctxDB, nil)
 	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	query := `INSERT INTO user_data (user_id, data_type, data_name, data_encrypted) VALUES ($1, $2, $3, $4)`
+	if _, err := tx.ExecContext(ctxDB, query, userUID, dataType, dataName, data); err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return nil
 }
 
@@ -147,11 +139,20 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
+	tx, err := s.db.BeginTx(ctxDB, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	var userUID string
 	query := `INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id;`
-	err := s.db.QueryRowContext(ctxDB, query, username, passwordHash).Scan(&userUID)
+	err = tx.QueryRowContext(ctxDB, query, username, passwordHash).Scan(&userUID)
 	if err != nil {
+		_ = tx.Rollback()
 		return "", "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	token, err := s.createSessionToken(ctxDB, userUID)
@@ -223,8 +224,20 @@ func (s *Store) DeleteData(ctx context.Context, id string) error {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
+	tx, err := s.db.BeginTx(ctxDB, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	query := `DELETE FROM user_data WHERE id = $1`
-	_, err := s.db.ExecContext(ctxDB, query, id)
+	_, err = tx.ExecContext(ctxDB, query, id)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("failed to execute query: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return err
 }
 
@@ -233,8 +246,20 @@ func (s *Store) UpdateData(ctx context.Context, id string, data []byte) error {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
+	tx, err := s.db.BeginTx(ctxDB, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	query := `UPDATE user_data SET data_encrypted = $1 WHERE id = $2`
-	_, err := s.db.ExecContext(ctxDB, query, data, id)
+	_, err = tx.ExecContext(ctxDB, query, data, id)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("failed to update user data: %w", err)
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
 	return err
 }
 
@@ -243,15 +268,24 @@ func (s *Store) createSessionToken(ctx context.Context, userUID string) (string,
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
+	tx, err := s.db.BeginTx(ctxDB, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
 	sessionToke, err := utils.GenerateToken()
 	if err != nil {
 		return "", err
 	}
 
 	query := `INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '20 minutes')`
-	_, err = s.db.ExecContext(ctxDB, query, userUID, sessionToke)
+	_, err = tx.ExecContext(ctxDB, query, userUID, sessionToke)
 	if err != nil {
+		_ = tx.Rollback()
 		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return sessionToke, nil
 }

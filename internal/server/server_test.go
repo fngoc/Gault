@@ -1,6 +1,7 @@
 package server
 
 import (
+	"Gault/internal/config"
 	"context"
 	"fmt"
 	"net"
@@ -259,6 +260,6 @@ func TestRun(t *testing.T) {
 	ln.Close()
 
 	go func() {
-		_ = Run(port, repo)
+		_ = Run(port, []config.EndpointRule{}, repo)
 	}()
 }

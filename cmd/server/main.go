@@ -14,15 +14,15 @@ func main() {
 
 	conf, err := config.ParseConfig("server_config")
 	if err != nil {
-		logger.Log.Fatal(err.Error())
+		logger.LogFatal(err.Error())
 	}
 
 	store, err := db.InitializePostgresDB(conf.DB)
 	if err != nil {
-		logger.Log.Fatal(err.Error())
+		logger.LogFatal(err.Error())
 	}
 
-	if err = server.Run(conf.Port, store); err != nil {
-		logger.Log.Fatal(err.Error())
+	if err = server.Run(conf.Port, conf.AllowEndpoints, store); err != nil {
+		logger.LogFatal(err.Error())
 	}
 }

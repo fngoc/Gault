@@ -19,12 +19,12 @@ func main() {
 		panic(err)
 	}
 
-	logger.Log.Info("Starting client")
-	logger.Log.Info(fmt.Sprintf("Version: %s, Build date: %s", Version, BuildDate))
+	logger.LogInfo("Starting client")
+	logger.LogInfo(fmt.Sprintf("Version: %s, Build date: %s", Version, BuildDate))
 
 	conf, err := config.ParseConfig("client_config")
 	if err != nil {
-		logger.Log.Fatal(err.Error())
+		logger.LogFatal(err.Error())
 	}
 
 	var conn *grpc.ClientConn
@@ -32,7 +32,7 @@ func main() {
 		var err error
 		conn, err = ui.GrpcClient(conf.Port)
 		if err != nil {
-			logger.Log.Fatal(err.Error())
+			logger.LogFatal(err.Error())
 		}
 	}()
 
@@ -41,6 +41,6 @@ func main() {
 	}
 
 	if err := ui.TUIClient(); err != nil {
-		logger.Log.Fatal(err.Error())
+		logger.LogFatal(err.Error())
 	}
 }

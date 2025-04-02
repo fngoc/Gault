@@ -1,6 +1,7 @@
 package server
 
 import (
+	"Gault/internal/config"
 	"Gault/pkg/logger"
 	"context"
 	"fmt"
@@ -12,10 +13,7 @@ import (
 )
 
 // unprotectedMethods список методов, которые НЕ требуют аутентификации
-var unprotectedMethods = map[string]bool{
-	"/api.proto.v1.AuthService/Login":        true,
-	"/api.proto.v1.AuthService/Registration": true,
-}
+var unprotectedMethods map[string]bool
 
 // AuthInterceptor проверяет токен сессии в каждом запросе
 func AuthInterceptor(
@@ -24,7 +22,8 @@ func AuthInterceptor(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
-	if unprotectedMethods[info.FullMethod] {
+	allowed, ok := unprotectedMethods[info.FullMethod]
+	if ok && allowed {
 		return handler(ctx, req)
 	}
 
@@ -47,7 +46,15 @@ func AuthInterceptor(
 	if !gaultServer.rep.CheckSessionUser(ctx, userUID, token) {
 		return nil, status.Error(codes.Unauthenticated, "user is not authorized")
 	}
-	logger.Log.Info(fmt.Sprintf("%s %s", info.FullMethod, token))
+	logger.LogInfo(fmt.Sprintf("%s %s", info.FullMethod, token))
 
 	return handler(ctx, req)
+}
+
+func setAllowEndpoints(rule []config.EndpointRule) {
+	rulesMap := make(map[string]bool)
+	for _, rule := range rule {
+		rulesMap[rule.Path] = rule.Allowed
+	}
+	unprotectedMethods = rulesMap
 }

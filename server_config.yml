@@ -1,2 +1,7 @@
 port: 8080
 db: postgres://postgres:postgres@postgres-db:5432/postgres?sslmode=disable
+allowEndpoints:
+  - path: "/api.proto.v1.AuthV1Service/Login"
+    allowed: true
+  - path: "/api.proto.v1.AuthV1Service/Registration"
+    allowed: true

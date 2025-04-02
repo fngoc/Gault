@@ -9,8 +9,14 @@ import (
 
 // Config структура файла конфигурации
 type Config struct {
-	Port int    `mapstructure:"port" default:"8080"`
-	DB   string `mapstructure:"db" default:"host=localhost user=postgres password=postgres dbname=test_db sslmode=disable"`
+	Port           int            `mapstructure:"port" default:"8080"`
+	DB             string         `mapstructure:"db" default:"host=localhost user=postgres password=postgres dbname=test_db sslmode=disable"`
+	AllowEndpoints []EndpointRule `mapstructure:"allowEndpoints"`
+}
+
+type EndpointRule struct {
+	Path    string `mapstructure:"path"`
+	Allowed bool   `mapstructure:"allowed"`
 }
 
 // ParseConfig парсинг конфигурации
@@ -28,6 +34,6 @@ func ParseConfig(nameConfig string) (Config, error) {
 		return Config{}, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
-	logger.Log.Info("loaded config")
+	logger.LogInfo("loaded config")
 	return conf, nil
 }

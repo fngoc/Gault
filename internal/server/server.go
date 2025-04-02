@@ -1,6 +1,7 @@
 package server
 
 import (
+	"Gault/internal/config"
 	"Gault/internal/db"
 	"Gault/pkg/logger"
 	"Gault/pkg/utils"
@@ -114,7 +115,7 @@ func (g *GaultService) UpdateData(ctx context.Context, req *pb.UpdateDataRequest
 var gaultServer *GaultService
 
 // Run запуск сервиса
-func Run(port int, store db.Repository) error {
+func Run(port int, unprotectedMethods []config.EndpointRule, store db.Repository) error {
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return err
@@ -122,11 +123,12 @@ func Run(port int, store db.Repository) error {
 
 	gaultServer = &GaultService{rep: store}
 
+	setAllowEndpoints(unprotectedMethods)
 	s := grpc.NewServer(grpc.UnaryInterceptor(AuthInterceptor))
 	pb.RegisterAuthV1ServiceServer(s, gaultServer)
 	pb.RegisterContentManagerV1ServiceServer(s, gaultServer)
 
-	logger.Log.Info("start gRPC server")
+	logger.LogInfo("start gRPC server")
 	if err = s.Serve(listen); err != nil {
 		return err
 	}
