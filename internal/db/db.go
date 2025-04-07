@@ -2,13 +2,16 @@ package db
 
 import (
 	pb "Gault/gen/go/api/proto/v1"
+	sqlc "Gault/gen/go/db"
 	"Gault/pkg/logger"
 	"Gault/pkg/utils"
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/pressly/goose"
 
 	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
@@ -21,39 +24,24 @@ type Store struct {
 
 // InitializePostgresDB инициализация базы данных
 func InitializePostgresDB(dbConf string) (Repository, error) {
-	db, err := sql.Open("postgres", dbConf)
+	postgresInstant, err := sql.Open("postgres", dbConf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	if err = createTables(db); err != nil {
-		return nil, fmt.Errorf("failed to create tables: %w", err)
+	if err := runMigrations(postgresInstant); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	err = db.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
 	logger.LogInfo("connected to postgres database")
-	return &Store{db: db}, nil
+	return &Store{db: postgresInstant}, nil
 }
 
-// createTables создание таблиц при запуске
-func createTables(db *sql.DB) error {
-	schemaBytes, err := os.ReadFile("schema.sql")
-	if err != nil {
-		return fmt.Errorf("cannot read schema.sql: %w", err)
+func runMigrations(db *sql.DB) error {
+	if err := goose.SetDialect("postgres"); err != nil {
+		return err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	if _, err = db.ExecContext(ctx, string(schemaBytes)); err != nil {
-		return fmt.Errorf("failed to execute schema.sql: %w", err)
-	}
-
-	logger.LogInfo("database schema applied")
-	return nil
+	return goose.Up(db, "db/migrations")
 }
 
 // SaveData сохранение данных
@@ -66,10 +54,17 @@ func (s *Store) SaveData(ctx context.Context, userUID, dataType, dataName string
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	query := `INSERT INTO user_data (user_id, data_type, data_name, data_encrypted) VALUES ($1, $2, $3, $4)`
-	if _, err := tx.ExecContext(ctxDB, query, userUID, dataType, dataName, data); err != nil {
+	q := sqlc.New(tx)
+	params := sqlc.SaveDataParams{
+		UserID:        stringToNullUUID(userUID),
+		DataType:      dataType,
+		DataName:      dataName,
+		DataEncrypted: data,
+	}
+
+	if err := q.SaveData(ctxDB, params); err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("failed to execute query: %w", err)
+		return fmt.Errorf("failed to save data: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -84,26 +79,24 @@ func (s *Store) GetData(ctx context.Context, id string) (*pb.GetDataResponse, er
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	var data []byte
-	var dataType string
-	query := `SELECT data_type, data_encrypted FROM user_data WHERE id = $1`
-	err := s.db.QueryRowContext(ctxDB, query, id).Scan(&dataType, &data)
+	q := sqlc.New(s.db)
+	result, err := q.GetData(ctxDB, stringToNullUUID(id).UUID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get user data: %w", err)
 	}
 
-	if dataType == "file" {
+	if result.DataType == "file" {
 		return &pb.GetDataResponse{
-			Type: dataType,
+			Type: result.DataType,
 			Content: &pb.GetDataResponse_FileData{
-				FileData: data,
+				FileData: result.DataEncrypted,
 			},
 		}, nil
 	}
 	return &pb.GetDataResponse{
-		Type: dataType,
+		Type: result.DataType,
 		Content: &pb.GetDataResponse_TextData{
-			TextData: string(data),
+			TextData: string(result.DataEncrypted),
 		},
 	}, nil
 }
@@ -113,25 +106,22 @@ func (s *Store) GetDataNameList(ctx context.Context, userUID string) (*pb.GetUse
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	query := `SELECT id, data_type, data_name FROM user_data WHERE user_id = $1`
-	rows, err := s.db.QueryContext(ctxDB, query, userUID)
+	q := sqlc.New(s.db)
+	rows, err := q.ListUserData(ctxDB, stringToNullUUID(userUID))
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute query: %w", err)
+		return nil, fmt.Errorf("query error: %w", err)
 	}
-	if rows.Err() != nil {
-		return nil, fmt.Errorf("failed to execute query: %w", rows.Err())
-	}
-	defer rows.Close()
 
-	var list []*pb.UserDataItem
-	for rows.Next() {
-		var item pb.UserDataItem
-		if err := rows.Scan(&item.Id, &item.Type, &item.Name); err != nil {
-			return nil, err
-		}
-		list = append(list, &item)
+	items := make([]*pb.UserDataItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, &pb.UserDataItem{
+			Id:   row.ID.String(),
+			Type: row.DataType,
+			Name: row.DataName,
+		})
 	}
-	return &pb.GetUserDataListResponse{Items: list}, nil
+
+	return &pb.GetUserDataListResponse{Items: items}, nil
 }
 
 // CreateUser создание пользователя
@@ -144,22 +134,25 @@ func (s *Store) CreateUser(ctx context.Context, username, passwordHash string) (
 		return "", "", fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	var userUID string
-	query := `INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id;`
-	err = tx.QueryRowContext(ctxDB, query, username, passwordHash).Scan(&userUID)
+	q := sqlc.New(tx)
+	userID, err := q.CreateUser(ctxDB, sqlc.CreateUserParams{
+		Username:     username,
+		PasswordHash: passwordHash,
+	})
 	if err != nil {
 		_ = tx.Rollback()
-		return "", "", err
+		return "", "", fmt.Errorf("failed to create user: %w", err)
 	}
+
 	if err := tx.Commit(); err != nil {
 		return "", "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	token, err := s.createSessionToken(ctxDB, userUID)
+	token, err := s.createSessionToken(ctxDB, userID.String())
 	if err != nil {
 		return "", "", err
 	}
-	return userUID, token, nil
+	return userID.String(), token, nil
 }
 
 // IsUserCreated проверка на существование пользователя
@@ -167,17 +160,12 @@ func (s *Store) IsUserCreated(ctx context.Context, username string) (bool, error
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	query := `SELECT EXISTS (SELECT 1 FROM users WHERE username = $1)`
-	row := s.db.QueryRowContext(ctxDB, query, username)
-	if row.Err() != nil {
-		return false, row.Err()
-	}
-
-	var isCreated bool
-	err := row.Scan(&isCreated)
+	q := sqlc.New(s.db)
+	isCreated, err := q.IsUserCreated(ctxDB, username)
 	if err != nil {
 		return false, fmt.Errorf("failed to check if user exists: %w", err)
 	}
+
 	return isCreated, nil
 }
 
@@ -186,13 +174,15 @@ func (s *Store) CheckSessionUser(ctx context.Context, userUID, token string) boo
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	var isCreated bool
-	query := `SELECT EXISTS (SELECT 1 FROM user_sessions WHERE user_id = $1 AND session_token = $2)`
-	err := s.db.QueryRowContext(ctxDB, query, userUID, token).Scan(&isCreated)
+	q := sqlc.New(s.db)
+	isValid, err := q.CheckSessionUser(ctxDB, sqlc.CheckSessionUserParams{
+		UserID:       stringToNullUUID(userUID),
+		SessionToken: token,
+	})
 	if err != nil {
 		return false
 	}
-	return isCreated
+	return isValid
 }
 
 // UpdateSessionUser обновление сессии пользователя
@@ -200,23 +190,24 @@ func (s *Store) UpdateSessionUser(ctx context.Context, username, password string
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	var userUID string
-	var hashedPassword string
-	query := `SELECT id, password_hash FROM users WHERE username = $1`
-	err := s.db.QueryRowContext(ctxDB, query, username).Scan(&userUID, &hashedPassword)
+	q := sqlc.New(s.db)
+	user, err := q.GetUserCredentialsByUsername(ctxDB, username)
 	if err != nil {
-		return "", "", err
-	}
-	err = bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
-	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("user lookup failed: %w", err)
 	}
 
-	token, err := s.createSessionToken(ctxDB, userUID)
-	if err != nil {
-		return "", "", err
+	// Сравниваем хеш
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return "", "", fmt.Errorf("invalid password")
 	}
-	return userUID, token, nil
+
+	// Создаём токен
+	token, err := s.createSessionToken(ctxDB, user.ID.String())
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create session token: %w", err)
+	}
+
+	return user.ID.String(), token, nil
 }
 
 // DeleteData удаление данных
@@ -229,16 +220,16 @@ func (s *Store) DeleteData(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	query := `DELETE FROM user_data WHERE id = $1`
-	_, err = tx.ExecContext(ctxDB, query, id)
-	if err != nil {
+	q := sqlc.New(tx)
+	if err := q.DeleteUserData(ctxDB, stringToNullUUID(id).UUID); err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("failed to execute query: %w", err)
+		return fmt.Errorf("failed to delete user data: %w", err)
 	}
-	if err = tx.Commit(); err != nil {
+
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return err
+	return nil
 }
 
 // UpdateData обновление данных
@@ -251,16 +242,20 @@ func (s *Store) UpdateData(ctx context.Context, id string, data []byte) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	query := `UPDATE user_data SET data_encrypted = $1 WHERE id = $2`
-	_, err = tx.ExecContext(ctxDB, query, data, id)
+	q := sqlc.New(tx)
+	err = q.UpdateUserData(ctxDB, sqlc.UpdateUserDataParams{
+		DataEncrypted: data,
+		ID:            stringToNullUUID(id).UUID,
+	})
 	if err != nil {
 		_ = tx.Rollback()
-		return fmt.Errorf("failed to update user data: %w", err)
+		return fmt.Errorf("update failed: %w", err)
 	}
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit failed: %w", err)
 	}
-	return err
+	return nil
 }
 
 // createSessionToken создание токена для пользователя
@@ -273,19 +268,31 @@ func (s *Store) createSessionToken(ctx context.Context, userUID string) (string,
 		return "", fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	sessionToke, err := utils.GenerateToken()
+	q := sqlc.New(tx)
+	sessionToken, err := utils.GenerateToken()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate token: %w", err)
 	}
 
-	query := `INSERT INTO user_sessions (user_id, session_token, expires_at) VALUES ($1, $2, NOW() + INTERVAL '20 minutes')`
-	_, err = tx.ExecContext(ctxDB, query, userUID, sessionToke)
+	err = q.InsertUserSession(ctxDB, sqlc.InsertUserSessionParams{
+		UserID:       stringToNullUUID(userUID),
+		SessionToken: sessionToken,
+	})
 	if err != nil {
 		_ = tx.Rollback()
-		return "", err
+		return "", fmt.Errorf("failed to insert session: %w", err)
 	}
+
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	return sessionToke, nil
+	return sessionToken, nil
+}
+
+func stringToNullUUID(s string) uuid.NullUUID {
+	u, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.NullUUID{Valid: false}
+	}
+	return uuid.NullUUID{UUID: u, Valid: true}
 }

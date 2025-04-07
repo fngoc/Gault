@@ -31,6 +31,8 @@ jobs:
           go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@latest
           go install github.com/golang/mock/mockgen@latest
           go install github.com/google/wire/cmd/wire@latest
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install github.com/pressly/goose/v3/cmd/goose@latest
 
       - name: Generate protobuf
         run: |
@@ -41,6 +43,7 @@ jobs:
         run: |
           mockgen -source=./internal/db/repository.go -destination=./gen/go/db/repository_mock.go -package=db 
           mockgen -source=./gen/go/api/proto/v1/data_service_grpc.pb.go -destination=./gen/go/client/client_mock.go -package=client
+          sqlc generate
 
       - name: Generate wire
         run: |

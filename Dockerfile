@@ -18,7 +18,8 @@ WORKDIR /app
 
 COPY --from=builder /app/gault .
 COPY server_config.yml .
-COPY schema.sql .
+COPY db/schema.sql db/schema.sql
+COPY db/migrations db/migrations
 
 RUN chmod +x gault
 

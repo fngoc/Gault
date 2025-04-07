@@ -9,9 +9,11 @@ require (
 	github.com/envoyproxy/protoc-gen-validate v1.2.1
 	github.com/gdamore/tcell/v2 v2.8.1
 	github.com/golang/mock v1.6.0
+	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/lib/pq v1.10.9
+	github.com/pressly/goose v2.7.0+incompatible
 	github.com/rivo/tview v0.0.0-20250322200051-73a5bd7d6839
 	github.com/spf13/viper v1.20.0
 	github.com/stretchr/testify v1.10.0
@@ -30,6 +32,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
