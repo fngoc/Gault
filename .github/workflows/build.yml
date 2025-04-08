@@ -49,7 +49,6 @@ jobs:
       - name: Generate mockgen
         run: |
           mockgen -source=./internal/db/repository.go -destination=./gen/go/db/repository_mock.go -package=db 
-          mockgen -source=./gen/go/api/proto/v1/data_service_grpc.pb.go -destination=./gen/go/client/client_mock.go -package=client
           sqlc generate
 
       - name: Generate wire
