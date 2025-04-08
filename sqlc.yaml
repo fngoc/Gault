@@ -7,3 +7,6 @@ sql:
       go:
         package: "db"
         out: "gen/go/db"
+        overrides:
+          - db_type: oid
+            go_type: uint32

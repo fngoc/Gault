@@ -24,7 +24,7 @@ service ContentManagerV1Service {
     };
   };
   // SaveData функция обработчик сохранения данных
-  rpc SaveData(SaveDataRequest) returns (SaveDataResponse) {
+  rpc SaveData(stream SaveDataRequest) returns (SaveDataResponse) {
     option (google.api.http) = {
       post: "/v1/data/saveData"
       body: "*"
@@ -38,7 +38,7 @@ service ContentManagerV1Service {
     };
   };
   // UpdateData функция обновления данных
-  rpc UpdateData(UpdateDataRequest) returns (UpdateDataResponse) {
+  rpc UpdateData(stream UpdateDataRequest) returns (UpdateDataResponse) {
     option (google.api.http) = {
       post: "/v1/data/updateData"
       body: "*"
@@ -81,6 +81,9 @@ message SaveDataRequest {
   string type = 2;
   string name = 3 [(validate.rules).string = {min_len: 1, max_len: 128}];
   bytes data = 4;
+
+  uint64 chunk_number = 5;
+  uint64 total_chunks = 6;
 }
 
 // Ответ на сохранение данных
@@ -96,8 +99,13 @@ message DeleteDataResponse {}
 
 // Запрос на обновление данных
 message UpdateDataRequest {
-  string id = 1;
-  bytes data = 2;
+  string data_uid = 1;
+  string user_uid = 2;
+  string type = 3;
+  bytes data = 4;
+
+  uint64 chunk_number = 5;
+  uint64 total_chunks = 6;
 }
 
 // Ответ на обновление данных

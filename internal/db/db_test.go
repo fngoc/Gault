@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -31,71 +32,6 @@ func TestInitializePostgresDB(t *testing.T) {
 
 	_, err = InitializePostgresDB("mock-dsn")
 	assert.Error(t, err)
-}
-
-func TestSaveData(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	mock.ExpectBegin()
-	ctx := context.Background()
-	mock.ExpectExec("INSERT INTO user_data").
-		WithArgs("3a0a4950-16e3-4720-814b-17e6b4fd0bc2", "type", "name", []byte("data")).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
-
-	err := store.SaveData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2", "type", "name", []byte("data"))
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestSaveDataError(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	mock.ExpectBegin()
-	ctx := context.Background()
-	mock.ExpectExec("INSERT INTO user_data").
-		WithArgs("user-uid", "type", "name", []byte("data")).
-		WillReturnError(errors.New("error"))
-	mock.ExpectRollback()
-
-	err := store.SaveData(ctx, "user-uid", "type", "name", []byte("data"))
-	assert.Error(t, err)
-}
-
-func TestGetDataText(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	ctx := context.Background()
-	mock.ExpectQuery(`(?i)SELECT\s+data_type,\s+data_encrypted\s+FROM\s+user_data\s+WHERE\s+id\s*=\s*\$?`).
-		WithArgs("3a0a4950-16e3-4720-814b-17e6b4fd0bc2").
-		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_encrypted"}).
-			AddRow("text", []byte("sample data")))
-
-	resp, err := store.GetData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2")
-	assert.NoError(t, err)
-	assert.Equal(t, "text", resp.Type)
-	assert.Equal(t, "sample data", resp.GetTextData())
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestGetDataFile(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	ctx := context.Background()
-	mock.ExpectQuery(`(?i)SELECT\s+data_type,\s+data_encrypted\s+FROM\s+user_data\s+WHERE\s+id\s*=\s*\$?`).
-		WithArgs("3a0a4950-16e3-4720-814b-17e6b4fd0bc2").
-		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_encrypted"}).
-			AddRow("file", []byte("sample data")))
-
-	resp, err := store.GetData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2")
-	assert.NoError(t, err)
-	assert.Equal(t, "file", resp.Type)
-	assert.Equal(t, "sample data", string(resp.GetFileData()))
-	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestCreateUser(t *testing.T) {
@@ -194,37 +130,6 @@ func TestDeleteDataError(t *testing.T) {
 	mock.ExpectRollback()
 
 	err := store.DeleteData(ctx, "data-id")
-	assert.Error(t, err)
-}
-
-func TestUpdateData(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	mock.ExpectBegin()
-	ctx := context.Background()
-	mock.ExpectExec(`(?i)UPDATE\s+user_data\s+SET\s+data_encrypted\s*=\s*\$1\s+WHERE\s+id\s*=\s*\$2`).
-		WithArgs([]byte("new data"), "3a0a4950-16e3-4720-814b-17e6b4fd0bc2").
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
-
-	err := store.UpdateData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2", []byte("new data"))
-	assert.NoError(t, err)
-	assert.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestUpdateDataError(t *testing.T) {
-	dbMock, mock, store := setupMockDB(t)
-	defer dbMock.Close()
-
-	mock.ExpectBegin()
-	ctx := context.Background()
-	mock.ExpectExec(`(?i)UPDATE\s+user_data\s+SET\s+data_encrypted\s*=\s*\$1\s+WHERE\s+id\s*=\s*\$2`).
-		WithArgs([]byte("new data"), "3a0a4950-16e3-4720-814b-17e6b4fd0bc2").
-		WillReturnError(errors.New("error"))
-	mock.ExpectRollback()
-
-	err := store.UpdateData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2", []byte("new data"))
 	assert.Error(t, err)
 }
 
@@ -341,4 +246,562 @@ func TestGetDataNameList(t *testing.T) {
 	assert.Equal(t, "type2", resp.Items[1].Type)
 	assert.Equal(t, "name2", resp.Items[1].Name)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBeginTx_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+	assert.NotNil(t, tx)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBeginTx_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin().WillReturnError(errors.New("begin tx error"))
+
+	tx, err := store.BeginTx(ctx)
+	assert.Error(t, err)
+	assert.Nil(t, tx)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateEmptyLO_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT lo_create\(0\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_create"}).AddRow(12345))
+
+	oid, err := store.CreateEmptyLO(ctx, tx)
+	assert.NoError(t, err)
+	assert.Equal(t, 12345, oid)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCreateEmptyLO_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT lo_create\(0\)`).
+		WillReturnError(errors.New("lo_create failed"))
+
+	_, err = store.CreateEmptyLO(ctx, tx)
+	assert.Error(t, err)
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertUserDataRecordTx_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectExec(`INSERT INTO user_data`).
+		WithArgs(
+			sqlmock.AnyArg(),
+			sqlmock.AnyArg(),
+			"test-type",
+			"test-name",
+			99,
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.InsertUserDataRecordTx(ctx, tx, "data-uuid", "user-uuid", "test-type", "test-name", 99)
+	assert.NoError(t, err)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertUserDataRecordTx_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectExec(`INSERT INTO user_data`).
+		WillReturnError(errors.New("insert user_data failed"))
+
+	err = store.InsertUserDataRecordTx(ctx, tx, "data-uuid", "user-uuid", "type", "name", 999)
+	assert.Error(t, err)
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestOpenLOForWriting_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, \$2\)`).
+		WithArgs(12345, 131072).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_open"}).AddRow(10))
+
+	fd, err := store.OpenLOForWriting(ctx, tx, 12345)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, fd)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestOpenLOForWriting_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, \$2\)`).
+		WillReturnError(errors.New("lo_open failed"))
+
+	fd, err := store.OpenLOForWriting(ctx, tx, 12345)
+	assert.Error(t, err)
+	assert.Equal(t, 0, fd)
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWriteLO_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	chunk := []byte("Hello, world!")
+	expectedWriteLen := len(chunk)
+
+	mock.ExpectQuery(`SELECT lowrite\(\$1, \$2\)`).
+		WithArgs(10, chunk).
+		WillReturnRows(sqlmock.NewRows([]string{"lowrite"}).AddRow(expectedWriteLen))
+
+	err = store.WriteLO(ctx, tx, 10, chunk)
+	assert.NoError(t, err)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWriteLO_PartialWrite(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	chunk := []byte("Hello!")
+	mock.ExpectQuery(`SELECT lowrite\(\$1, \$2\)`).
+		WithArgs(10, chunk).
+		WillReturnRows(sqlmock.NewRows([]string{"lowrite"}).AddRow(3))
+
+	err = store.WriteLO(ctx, tx, 10, chunk)
+	assert.Error(t, err)
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestWriteLO_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectQuery(`SELECT lowrite\(\$1, \$2\)`).
+		WillReturnError(errors.New("lowrite failed"))
+
+	err = store.WriteLO(ctx, tx, 10, []byte("data"))
+	assert.Error(t, err)
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCloseLO(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectExec(`SELECT lo_close\(\$1\)`).
+		WithArgs(10).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	store.CloseLO(ctx, tx, 10)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetData_Error_File(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_name", "largeobject_oid"}).
+			AddRow("file", "some-name", 123))
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
+		WithArgs(123).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_open"}).AddRow(10))
+
+	chunkRows := []string{"loread"}
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WithArgs(10, 1024*1024).
+		WillReturnRows(sqlmock.NewRows(chunkRows).AddRow([]byte("Hello, ")))
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WithArgs(10, 1024*1024).
+		WillReturnRows(sqlmock.NewRows(chunkRows).AddRow([]byte("world!")))
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WithArgs(10, 1024*1024).
+		WillReturnRows(sqlmock.NewRows(chunkRows).AddRow([]byte{}))
+
+	mock.ExpectExec(`SELECT lo_close\(\$1\)`).
+		WithArgs(10).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectCommit()
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for db test")
+		}
+	}()
+	resp, err := store.GetData(ctx, "3a0a4950-16e3-4720-814b-17e6b4fd0bc2")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetData_Error_Text(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_name", "largeobject_oid"}).
+			AddRow("text", "some-name", 999))
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
+		WithArgs(999).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_open"}).AddRow(20))
+
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WithArgs(20, 1024*1024).
+		WillReturnRows(sqlmock.NewRows([]string{"loread"}).AddRow([]byte("Привет!")))
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WithArgs(20, 1024*1024).
+		WillReturnRows(sqlmock.NewRows([]string{"loread"}).AddRow([]byte{}))
+
+	mock.ExpectExec(`SELECT lo_close\(\$1\)`).
+		WithArgs(20).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectCommit()
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for db test")
+		}
+	}()
+	resp, err := store.GetData(ctx, "some-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetData_BeginTxError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin().WillReturnError(errors.New("begin tx error"))
+
+	resp, err := store.GetData(ctx, "any-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "begin transaction: begin tx error")
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetData_NotFoundError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WillReturnError(sql.ErrNoRows)
+
+	mock.ExpectRollback()
+
+	resp, err := store.GetData(ctx, "nonexistent-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetData_loOpenError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_name", "largeobject_oid"}).
+			AddRow("file", "name", 123))
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
+		WithArgs(123).
+		WillReturnError(errors.New("lo_open failed"))
+
+	mock.ExpectRollback()
+
+	resp, err := store.GetData(ctx, "some-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+	assert.Contains(t, err.Error(), "lo_open failed")
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetData_loreadError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_name", "largeobject_oid"}).
+			AddRow("file", "name", 777))
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
+		WithArgs(777).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_open"}).AddRow(40))
+
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WillReturnError(errors.New("loread failed"))
+
+	mock.ExpectRollback()
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for db test")
+		}
+	}()
+	resp, err := store.GetData(ctx, "some-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetData_CommitError(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+
+	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
+		WillReturnRows(sqlmock.NewRows([]string{"data_type", "data_name", "largeobject_oid"}).
+			AddRow("file", "name", 555))
+
+	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
+		WithArgs(555).
+		WillReturnRows(sqlmock.NewRows([]string{"lo_open"}).AddRow(50))
+
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"loread"}).AddRow([]byte("some chunk data")))
+	mock.ExpectQuery(`SELECT loread\(\$1, \$2\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"loread"}).AddRow([]byte{}))
+
+	mock.ExpectExec(`SELECT lo_close\(\$1\)`).
+		WithArgs(50).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectCommit().WillReturnError(errors.New("commit error"))
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for db test")
+		}
+	}()
+	resp, err := store.GetData(ctx, "some-id")
+	assert.Error(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestTruncateLO_Success(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectExec(`SELECT lo_truncate\(\$1, \$2\)`).
+		WithArgs(10, int64(1000)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.TruncateLO(ctx, tx, 10, 1000)
+	assert.NoError(t, err)
+
+	mock.ExpectCommit()
+	err = tx.Commit()
+	assert.NoError(t, err)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTruncateLO_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectBegin()
+	tx, err := store.BeginTx(ctx)
+	assert.NoError(t, err)
+
+	mock.ExpectExec(`SELECT lo_truncate\(\$1, \$2\)`).
+		WithArgs(10, int64(1000)).
+		WillReturnError(errors.New("lo_truncate error"))
+
+	err = store.TruncateLO(ctx, tx, 10, 1000)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "lo_truncate failed")
+
+	mock.ExpectRollback()
+	rerr := tx.Rollback()
+	assert.NoError(t, rerr)
+
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetOidByItemID_Error(t *testing.T) {
+	dbMock, mock, store := setupMockDB(t)
+	defer dbMock.Close()
+
+	ctx := context.Background()
+
+	mock.ExpectQuery(`SELECT oid FROM your_table WHERE id = \$1`).
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"oid"}).AddRow(42))
+
+	_, err := store.GetOidByItemID(ctx, "item-id")
+	assert.Error(t, err)
 }

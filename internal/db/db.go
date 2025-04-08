@@ -44,59 +44,69 @@ func runMigrations(db *sql.DB) error {
 	return goose.Up(db, "db/migrations")
 }
 
-// SaveData сохранение данных
-func (s *Store) SaveData(ctx context.Context, userUID, dataType, dataName string, data []byte) error {
-	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
-	defer cancel()
-
-	tx, err := s.db.BeginTx(ctxDB, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	q := sqlc.New(tx)
-	params := sqlc.SaveDataParams{
-		UserID:        stringToNullUUID(userUID),
-		DataType:      dataType,
-		DataName:      dataName,
-		DataEncrypted: data,
-	}
-
-	if err := q.SaveData(ctxDB, params); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("failed to save data: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
-}
-
 // GetData получение данных
 func (s *Store) GetData(ctx context.Context, id string) (*pb.GetDataResponse, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
 	defer cancel()
 
-	q := sqlc.New(s.db)
-	result, err := q.GetData(ctxDB, stringToNullUUID(id).UUID)
+	tx, err := s.db.BeginTx(ctxDB, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get user data: %w", err)
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func(tx *sql.Tx) {
+		err := tx.Rollback()
+		if err != nil {
+			panic(err)
+		}
+	}(tx)
+
+	q := sqlc.New(tx)
+	info, err := q.GetDataInfoByID(ctxDB, stringToNullUUID(id).UUID)
+	if err != nil {
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 
-	if result.DataType == "file" {
+	// Открываем LO
+	var fd int
+	if err = tx.QueryRowContext(ctxDB, `SELECT lo_open($1, 131072)`, info.LargeobjectOid).Scan(&fd); err != nil {
+		return nil, fmt.Errorf("lo_open failed: %w", err)
+	}
+	defer func() {
+		_, _ = tx.ExecContext(ctxDB, `SELECT lo_close($1)`, fd)
+	}()
+
+	// Читаем по чанкам
+	var result []byte
+	const chunkSize = 1024 * 1024
+	for {
+		var chunk []byte
+		err = tx.QueryRowContext(ctxDB, `SELECT loread($1, $2)`, fd, chunkSize).Scan(&chunk)
+		if err == sql.ErrNoRows || len(chunk) == 0 {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("loread failed: %w", err)
+		}
+		result = append(result, chunk...)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit failed: %w", err)
+	}
+
+	// Сборка ответа
+	if info.DataType == "file" {
 		return &pb.GetDataResponse{
-			Type: result.DataType,
+			Type: info.DataType,
 			Content: &pb.GetDataResponse_FileData{
-				FileData: result.DataEncrypted,
+				FileData: result,
 			},
 		}, nil
 	}
 	return &pb.GetDataResponse{
-		Type: result.DataType,
+		Type: info.DataType,
 		Content: &pb.GetDataResponse_TextData{
-			TextData: string(result.DataEncrypted),
+			TextData: string(result),
 		},
 	}, nil
 }
@@ -232,32 +242,6 @@ func (s *Store) DeleteData(ctx context.Context, id string) error {
 	return nil
 }
 
-// UpdateData обновление данных
-func (s *Store) UpdateData(ctx context.Context, id string, data []byte) error {
-	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
-	defer cancel()
-
-	tx, err := s.db.BeginTx(ctxDB, nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	q := sqlc.New(tx)
-	err = q.UpdateUserData(ctxDB, sqlc.UpdateUserDataParams{
-		DataEncrypted: data,
-		ID:            stringToNullUUID(id).UUID,
-	})
-	if err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("update failed: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit failed: %w", err)
-	}
-	return nil
-}
-
 // createSessionToken создание токена для пользователя
 func (s *Store) createSessionToken(ctx context.Context, userUID string) (string, error) {
 	ctxDB, cancel := context.WithTimeout(ctx, 7*time.Second)
@@ -289,10 +273,90 @@ func (s *Store) createSessionToken(ctx context.Context, userUID string) (string,
 	return sessionToken, nil
 }
 
+// stringToNullUUID перевод строки в UUID
 func stringToNullUUID(s string) uuid.NullUUID {
 	u, err := uuid.Parse(s)
 	if err != nil {
 		return uuid.NullUUID{Valid: false}
 	}
 	return uuid.NullUUID{UUID: u, Valid: true}
+}
+
+// BeginTx начало транзакции
+func (s *Store) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	return tx, nil
+}
+
+// CreateEmptyLO создание пустого файла в БД
+func (s *Store) CreateEmptyLO(ctx context.Context, tx *sql.Tx) (int, error) {
+	var oid int
+	if err := tx.QueryRowContext(ctx, `SELECT lo_create(0)`).Scan(&oid); err != nil {
+		return 0, fmt.Errorf("lo_create failed: %w", err)
+	}
+	return oid, nil
+}
+
+func (s *Store) GetOidByItemID(ctx context.Context, itemID string) (int, error) {
+	q := sqlc.New(s.db)
+	oid, err := q.GetOidByID(ctx, stringToNullUUID(itemID).UUID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get oid by item id: %w", err)
+	}
+	return int(oid), nil
+}
+
+// InsertUserDataRecordTx вставка данных
+func (s *Store) InsertUserDataRecordTx(ctx context.Context, tx *sql.Tx, userDataID, userUID, dataType, dataName string, oid int) error {
+	q := sqlc.New(tx)
+	err := q.InsertUserDataWithOid(ctx, sqlc.InsertUserDataWithOidParams{
+		ID:             stringToNullUUID(userDataID).UUID,
+		UserID:         stringToNullUUID(userUID),
+		DataType:       dataType,
+		DataName:       dataName,
+		LargeobjectOid: uint32(oid),
+	})
+	if err != nil {
+		return fmt.Errorf("insert user_data failed: %w", err)
+	}
+	return nil
+}
+
+// OpenLOForWriting открывает LO один раз
+func (s *Store) OpenLOForWriting(ctx context.Context, tx *sql.Tx, oid int) (int, error) {
+	const invWrite = 131072
+	var fd int
+	if err := tx.QueryRowContext(ctx, `SELECT lo_open($1, $2)`, oid, invWrite).Scan(&fd); err != nil {
+		return 0, fmt.Errorf("lo_open failed: %w", err)
+	}
+	return fd, nil
+}
+
+// WriteLO записывает чанк в открытый LO
+func (s *Store) WriteLO(ctx context.Context, tx *sql.Tx, fd int, chunk []byte) error {
+	var wrote int
+	if err := tx.QueryRowContext(ctx, `SELECT lowrite($1, $2)`, fd, chunk).Scan(&wrote); err != nil {
+		return fmt.Errorf("lowrite failed: %w", err)
+	}
+	if wrote != len(chunk) {
+		return fmt.Errorf("partial write: expected %d, wrote %d", len(chunk), wrote)
+	}
+	return nil
+}
+
+// CloseLO закрывает файловый дескриптор LO
+func (s *Store) CloseLO(ctx context.Context, tx *sql.Tx, fd int) {
+	_, _ = tx.ExecContext(ctx, `SELECT lo_close($1)`, fd)
+}
+
+// TruncateLO обнуляет содержимое LO, делая его длину равной newSize
+func (s *Store) TruncateLO(ctx context.Context, tx *sql.Tx, fd int, newSize int64) error {
+	_, err := tx.ExecContext(ctx, `SELECT lo_truncate($1, $2)`, fd, newSize)
+	if err != nil {
+		return fmt.Errorf("lo_truncate failed: %w", err)
+	}
+	return nil
 }

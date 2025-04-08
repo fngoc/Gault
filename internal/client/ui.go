@@ -1,60 +1,16 @@
-package ui
+package client
 
 import (
 	pb "Gault/gen/go/api/proto/v1"
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
-
-const maxSizeBytes = 1024 * 1024 * 100 // 100 MB
-
-var (
-	pages *tview.Pages
-
-	autClient  pb.AuthV1ServiceClient
-	dataClient pb.ContentManagerV1ServiceClient
-)
-
-// GrpcClient устанавливает gRPC-соединение
-func GrpcClient(port int) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(
-		fmt.Sprintf(":%d", port),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(maxSizeBytes),
-			grpc.MaxCallSendMsgSize(maxSizeBytes),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	autClient = pb.NewAuthV1ServiceClient(conn)
-	dataClient = pb.NewContentManagerV1ServiceClient(conn)
-	return conn, nil
-}
-
-// TUIClient запуск TUI
-func TUIClient() error {
-	app := tview.NewApplication()
-	pages = tview.NewPages()
-
-	loginFlex := showLoginMenu(app)
-	pages.AddPage("login", loginFlex, true, true)
-
-	app.SetRoot(pages, true).SetFocus(loginFlex)
-
-	if err := app.Run(); err != nil {
-		return err
-	}
-	return nil
-}
 
 // showLoginMenu экран логина/регистрации
 func showLoginMenu(app *tview.Application) tview.Primitive {
@@ -75,42 +31,10 @@ func showLoginMenu(app *tview.Application) tview.Primitive {
 		AddFormItem(loginField).
 		AddFormItem(passField).
 		AddButton("Login", func() {
-			login := loginField.GetText()
-			pass := passField.GetText()
-
-			response, err := autClient.Login(
-				context.Background(),
-				&pb.LoginRequest{
-					Login:    login,
-					Password: pass,
-				},
-			)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Login error: %v", err))
-				return
-			}
-
-			message.SetTextColor(tcell.ColorGreen).SetText("Login successful!")
-			showDataScreen(app, response.UserUid, response.Token, message)
+			login(app, loginField.GetText(), passField.GetText(), message)
 		}).
 		AddButton("Register", func() {
-			login := loginField.GetText()
-			pass := passField.GetText()
-
-			response, err := autClient.Registration(
-				context.Background(),
-				&pb.RegistrationRequest{
-					Login:    login,
-					Password: pass,
-				},
-			)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Registration error: %v", err))
-				return
-			}
-
-			message.SetTextColor(tcell.ColorGreen).SetText("Registration successful!")
-			showDataScreen(app, response.UserUid, response.Token, message)
+			registration(app, loginField.GetText(), passField.GetText(), message)
 		}).
 		AddButton("Exit", func() {
 			app.Stop()
@@ -126,6 +50,40 @@ func showLoginMenu(app *tview.Application) tview.Primitive {
 		AddItem(message, 1, 1, false)
 
 	return flex
+}
+
+// registration запрос на регистрацию
+func registration(app *tview.Application, login string, pass string, message *tview.TextView) {
+	response, err := autClient.Registration(
+		context.Background(),
+		&pb.RegistrationRequest{
+			Login:    login,
+			Password: pass,
+		},
+	)
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Registration error: %v", err))
+		return
+	}
+	message.SetTextColor(tcell.ColorGreen).SetText("Registration successful!")
+	showDataScreen(app, response.UserUid, response.Token, message)
+}
+
+// login запрос на авторизацию
+func login(app *tview.Application, login, pass string, message *tview.TextView) {
+	response, err := autClient.Login(
+		context.Background(),
+		&pb.LoginRequest{
+			Login:    login,
+			Password: pass,
+		},
+	)
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Login error: %v", err))
+		return
+	}
+	message.SetTextColor(tcell.ColorGreen).SetText("Login successful!")
+	showDataScreen(app, response.UserUid, response.Token, message)
 }
 
 // showDataScreen экран с таблицей данных и кнопками добавления/чтения/скачивания данных
@@ -207,17 +165,7 @@ func showAddTextDialog(app *tview.Application, userUID, token string, message *t
 		AddFormItem(inputNameField).
 		AddFormItem(inputField).
 		AddButton("Save", func() {
-			text := inputField.GetText()
-			name := inputNameField.GetText()
-
-			err := saveData(userUID, token, "text", name, []byte(text))
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Save error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText("Text saved!")
-				_ = loadUserData(table, userUID, token)
-			}
-			closeDialog("dialog_add_text")
+			saveText(inputField.GetText(), inputNameField.GetText(), userUID, token, table, message)
 		}).
 		AddButton("Cancel", func() {
 			closeDialog("dialog_add_text")
@@ -236,6 +184,18 @@ func showAddTextDialog(app *tview.Application, userUID, token string, message *t
 	app.SetFocus(dialogForm)
 }
 
+// saveText запрос на сохранение текста
+func saveText(text, name, userUID, token string, table *tview.Table, message *tview.TextView) {
+	err := saveData(userUID, token, "text", name, "", []byte(text))
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Save error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("Text saved!")
+		_ = loadUserData(table, userUID, token)
+	}
+	closeDialog("dialog_add_text")
+}
+
 // showAddFileDialog модальное окно для сохранения файла
 func showAddFileDialog(app *tview.Application, userUID, token string, message *tview.TextView, table *tview.Table) {
 	inputNameField := tview.NewInputField().
@@ -250,23 +210,7 @@ func showAddFileDialog(app *tview.Application, userUID, token string, message *t
 		AddFormItem(inputNameField).
 		AddFormItem(filePathField).
 		AddButton("Save", func() {
-			filePath := filePathField.GetText()
-			name := inputNameField.GetText()
-
-			data, err := os.ReadFile(filePath)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Failed to read file: %v", err))
-				closeDialog("dialog_add_file")
-				return
-			}
-			err = saveData(userUID, token, "file", name, data)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Save error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText("File saved!")
-				_ = loadUserData(table, userUID, token)
-			}
-			closeDialog("dialog_add_file")
+			saveFile(filePathField.GetText(), inputNameField.GetText(), userUID, token, table, message)
 		}).
 		AddButton("Cancel", func() {
 			closeDialog("dialog_add_file")
@@ -283,6 +227,18 @@ func showAddFileDialog(app *tview.Application, userUID, token string, message *t
 	pages.AddPage("dialog_add_file", dialogFlex, true, true)
 	pages.SwitchToPage("dialog_add_file")
 	app.SetFocus(dialogForm)
+}
+
+// saveFile запрос на сохранение файла
+func saveFile(filePath, name, userUID, token string, table *tview.Table, message *tview.TextView) {
+	err := saveData(userUID, token, "file", name, filePath, []byte(""))
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Save error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("File saved!")
+		_ = loadUserData(table, userUID, token)
+	}
+	closeDialog("dialog_add_file")
 }
 
 // showItemDataDialog получение item для отображения или скачивания
@@ -327,13 +283,7 @@ func showTextContentModal(app *tview.Application, userUID, token, itemID string,
 			showEditTextDialog(app, userUID, token, itemID, textData, table, message)
 		}).
 		AddButton("Delete", func() {
-			if err := deleteData(userUID, token, itemID); err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Delete error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText("Delete success!")
-			}
-			_ = loadUserData(table, userUID, token)
-			closeDialog("dialog_view_text")
+			deleteText(userUID, token, itemID, table, message)
 		}).
 		AddButton("Close", func() {
 			closeDialog("dialog_view_text")
@@ -349,6 +299,17 @@ func showTextContentModal(app *tview.Application, userUID, token, itemID string,
 	app.SetFocus(form)
 }
 
+// deleteText запрос на удаление текста
+func deleteText(userUID, token, itemID string, table *tview.Table, message *tview.TextView) {
+	if err := deleteData(userUID, token, itemID); err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Delete error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("Delete success!")
+	}
+	_ = loadUserData(table, userUID, token)
+	closeDialog("dialog_view_text")
+}
+
 // showEditTextDialog модальное окно для редактирования текста
 func showEditTextDialog(app *tview.Application, userUID, token, itemID string, oldText string, table *tview.Table, message *tview.TextView) {
 	inputField := tview.NewInputField().
@@ -359,18 +320,7 @@ func showEditTextDialog(app *tview.Application, userUID, token, itemID string, o
 	dialogForm := tview.NewForm().
 		AddFormItem(inputField).
 		AddButton("Save", func() {
-			newText := inputField.GetText()
-			err := updateData(userUID, token, itemID, []byte(newText))
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).
-					SetText(fmt.Sprintf("Update error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).
-					SetText("Update success!")
-				_ = loadUserData(table, userUID, token)
-			}
-			closeDialog("dialog_edit_text")
-			closeDialog("dialog_view_text")
+			updateText(inputField.GetText(), userUID, token, itemID, table, message)
 		}).
 		AddButton("Cancel", func() {
 			closeDialog("dialog_edit_text")
@@ -389,6 +339,19 @@ func showEditTextDialog(app *tview.Application, userUID, token, itemID string, o
 	app.SetFocus(dialogForm)
 }
 
+// updateText запрос на обновление текста
+func updateText(newText, userUID, token, itemID string, table *tview.Table, message *tview.TextView) {
+	err := updateData(userUID, token, itemID, "text", "", []byte(newText))
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Update error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("Update success!")
+		_ = loadUserData(table, userUID, token)
+	}
+	closeDialog("dialog_edit_text")
+	closeDialog("dialog_view_text")
+}
+
 // showFileContentModal модальное окно для скачивания файла
 func showFileContentModal(app *tview.Application, userUID, token, itemID string, fileData []byte, table *tview.Table, message *tview.TextView) {
 	filePathField := tview.NewInputField().
@@ -398,26 +361,13 @@ func showFileContentModal(app *tview.Application, userUID, token, itemID string,
 	form := tview.NewForm().
 		AddFormItem(filePathField).
 		AddButton("Save", func() {
-			path := filePathField.GetText()
-			err := os.WriteFile(path, fileData, 0644)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Error saving file: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText(fmt.Sprintf("File saved to: %s", path))
-			}
-			closeDialog("dialog_view_file")
+			downloadFile(filePathField.GetText(), fileData, message)
 		}).
 		AddButton("Replace", func() {
 			showReplaceFileDialog(app, userUID, token, itemID, fileData, table, message)
 		}).
 		AddButton("Delete", func() {
-			if err := deleteData(userUID, token, itemID); err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Delete error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText("Delete success!")
-			}
-			_ = loadUserData(table, userUID, token)
-			closeDialog("dialog_view_text")
+			deleteFile(userUID, token, itemID, table, message)
 		}).
 		AddButton("Cancel", func() {
 			closeDialog("dialog_view_file")
@@ -441,6 +391,28 @@ func showFileContentModal(app *tview.Application, userUID, token, itemID string,
 	app.SetFocus(form)
 }
 
+// downloadFile запрос на скачивание файла
+func downloadFile(path string, fileData []byte, message *tview.TextView) {
+	err := os.WriteFile(path, fileData, 0644)
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Error saving file: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText(fmt.Sprintf("File saved to: %s", path))
+	}
+	closeDialog("dialog_view_file")
+}
+
+// deleteFile запрос на удаление файла
+func deleteFile(userUID string, token string, itemID string, table *tview.Table, message *tview.TextView) {
+	if err := deleteData(userUID, token, itemID); err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Delete error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("Delete success!")
+	}
+	_ = loadUserData(table, userUID, token)
+	closeDialog("dialog_view_text")
+}
+
 // showReplaceFileDialog модальное окно для выбора нового файла
 func showReplaceFileDialog(app *tview.Application, userUID, token, itemID string, oldFileData []byte, table *tview.Table, message *tview.TextView) {
 	newFilePathField := tview.NewInputField().
@@ -450,21 +422,7 @@ func showReplaceFileDialog(app *tview.Application, userUID, token, itemID string
 	dialogForm := tview.NewForm().
 		AddFormItem(newFilePathField).
 		AddButton("Save", func() {
-			newPath := newFilePathField.GetText()
-			newData, err := os.ReadFile(newPath)
-			if err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Failed to read file: %v", err))
-				closeDialog("dialog_replace_file")
-				return
-			}
-			if err := updateData(userUID, token, itemID, newData); err != nil {
-				message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Replace error: %v", err))
-			} else {
-				message.SetTextColor(tcell.ColorGreen).SetText("File replaced!")
-				_ = loadUserData(table, userUID, token)
-			}
-			closeDialog("dialog_replace_file")
-			closeDialog("dialog_view_file")
+			updateFile(newFilePathField.GetText(), userUID, token, itemID, table, message)
 		}).
 		AddButton("Cancel", func() {
 			closeDialog("dialog_replace_file")
@@ -481,6 +439,19 @@ func showReplaceFileDialog(app *tview.Application, userUID, token, itemID string
 	pages.AddPage("dialog_replace_file", dialogFlex, true, true)
 	pages.SwitchToPage("dialog_replace_file")
 	app.SetFocus(dialogForm)
+}
+
+// updateFile запрос на обновление файла
+func updateFile(newPath, userUID, token, itemID string, table *tview.Table, message *tview.TextView) {
+	err := updateData(userUID, token, itemID, "file", newPath, []byte(""))
+	if err != nil {
+		message.SetTextColor(tcell.ColorRed).SetText(fmt.Sprintf("Replace error: %v", err))
+	} else {
+		message.SetTextColor(tcell.ColorGreen).SetText("File replaced!")
+		_ = loadUserData(table, userUID, token)
+	}
+	closeDialog("dialog_replace_file")
+	closeDialog("dialog_view_file")
 }
 
 // loadUserData загрузка данных пользователя для таблицы
@@ -514,34 +485,197 @@ func loadUserData(table *tview.Table, userUID, token string) error {
 }
 
 // saveData делает запрос на сохранение данных
-func saveData(userUID, token, dataType, name string, data []byte) error {
+func saveData(userUID, token, dataType, name, filePath string, data []byte) error {
 	md := metadata.Pairs(
 		"userUID", userUID,
 		"authorization", token,
 	)
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
-	_, err := dataClient.SaveData(ctx, &pb.SaveDataRequest{
-		UserUid: userUID,
-		Type:    dataType,
-		Name:    name,
-		Data:    data,
-	})
-	return err
+
+	if dataType == "text" {
+		return sendTextToServer(ctx, userUID, dataType, name, data)
+	}
+	return sendBigFileToServer(ctx, filePath, userUID, dataType, name)
+}
+
+// sendTextToServer отправляет текст через SaveData
+func sendTextToServer(ctx context.Context, userUID, dataType, name string, dataText []byte) error {
+	// Инициируем стрим
+	stream, err := dataClient.SaveData(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Посылаем один чанк
+	req := &pb.SaveDataRequest{
+		UserUid:     userUID,
+		Type:        dataType,
+		Name:        name,
+		Data:        dataText,
+		ChunkNumber: 1,
+		TotalChunks: 1,
+	}
+	if err = stream.Send(req); err != nil {
+		return err
+	}
+
+	// Закрываем стрим и ждём ответа
+	_, err = stream.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// sendBigFileToServer читает большой файл и грузит его чанками через SaveData
+func sendBigFileToServer(ctx context.Context, filePath, userUID, dataType, dataName string) error {
+	// Открываем локальный файл
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	// Создаём gRPC стрим
+	stream, err := dataClient.SaveData(ctx)
+	if err != nil {
+		return fmt.Errorf("could not create stream: %w", err)
+	}
+
+	// В цикле читаем файл и отправляем чанки по 1 MB
+	const chunkSize = 1024 * 1024
+	buf := make([]byte, chunkSize)
+
+	for {
+		n, readErr := f.Read(buf)
+		if readErr != nil && readErr != io.EOF {
+			return fmt.Errorf("read file error: %w", readErr)
+		}
+		if n == 0 {
+			// достигли конца файла
+			break
+		}
+
+		req := &pb.SaveDataRequest{
+			UserUid: userUID,
+			Type:    dataType,
+			Name:    dataName,
+			Data:    buf[:n],
+		}
+		// Отправляем чанк в стрим
+		if errSend := stream.Send(req); errSend != nil {
+			return fmt.Errorf("send chunk error: %w", errSend)
+		}
+
+		if readErr == io.EOF {
+			break
+		}
+	}
+
+	// Закрываем стрим
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return fmt.Errorf("CloseAndRecv error: %w", err)
+	}
+	fmt.Println("File uploaded successfully. SaveDataResponse:", resp)
+	return nil
 }
 
 // updateData – делает запрос на обновление данных
-func updateData(userUID, token, itemID string, data []byte) error {
+func updateData(userUID, token, itemID, dataType, newPath string, data []byte) error {
 	md := metadata.Pairs(
 		"userUID", userUID,
 		"authorization", token,
 	)
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 
-	_, err := dataClient.UpdateData(ctx, &pb.UpdateDataRequest{
-		Id:   itemID,
-		Data: data,
-	})
-	return err
+	if dataType == "text" {
+		return sendUpdateTextToServer(ctx, userUID, dataType, itemID, data)
+	}
+	return sendUpdateBigFileToServer(ctx, userUID, dataType, itemID, newPath)
+}
+
+// sendUpdateTextToServer отправляет текст через UpdateData
+func sendUpdateTextToServer(ctx context.Context, userUID, dataType, itemID string, dataText []byte) error {
+	// Инициируем стрим
+	stream, err := dataClient.UpdateData(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Посылаем один чанк
+	req := &pb.UpdateDataRequest{
+		UserUid:     userUID,
+		Type:        dataType,
+		DataUid:     itemID,
+		Data:        dataText,
+		ChunkNumber: 1,
+		TotalChunks: 1,
+	}
+	if err = stream.Send(req); err != nil {
+		return err
+	}
+
+	// Закрываем стрим и ждём ответа
+	_, err = stream.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// sendUpdateBigFileToServer читает большой файл и грузит его чанками через UpdateData
+func sendUpdateBigFileToServer(ctx context.Context, userUID, dataType, itemID, filePath string) error {
+	// Открываем локальный файл
+	f, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer f.Close()
+
+	// Создаём gRPC стрим
+	stream, err := dataClient.UpdateData(ctx)
+	if err != nil {
+		return fmt.Errorf("could not create stream: %w", err)
+	}
+
+	// В цикле читаем файл и отправляем чанки по 1 MB
+	const chunkSize = 1024 * 1024
+	buf := make([]byte, chunkSize)
+
+	for {
+		n, readErr := f.Read(buf)
+		if readErr != nil && readErr != io.EOF {
+			return fmt.Errorf("read file error: %w", readErr)
+		}
+		if n == 0 {
+			// достигли конца файла
+			break
+		}
+
+		req := &pb.UpdateDataRequest{
+			UserUid: userUID,
+			Type:    dataType,
+			DataUid: itemID,
+			Data:    buf[:n],
+		}
+		// Отправляем чанк в стрим
+		if errSend := stream.Send(req); errSend != nil {
+			return fmt.Errorf("send chunk error: %w", errSend)
+		}
+
+		if readErr == io.EOF {
+			break
+		}
+	}
+
+	// Закрываем стрим
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return fmt.Errorf("CloseAndRecv error: %w", err)
+	}
+	fmt.Println("File uploaded successfully. UpdateDataResponse:", resp)
+	return nil
 }
 
 // deleteData делает запрос на удаление данных

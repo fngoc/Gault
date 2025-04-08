@@ -14,12 +14,12 @@ CREATE TABLE users
 
 CREATE TABLE user_data
 (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id        UUID REFERENCES users (id) ON DELETE CASCADE,
-    data_type      VARCHAR(50) NOT NULL,
-    data_name      VARCHAR(50) NOT NULL,
-    data_encrypted BYTEA       NOT NULL,
-    created_at     TIMESTAMPTZ      DEFAULT NOW()
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users (id) ON DELETE CASCADE,
+    data_type       VARCHAR(50) NOT NULL,
+    data_name       VARCHAR(50) NOT NULL,
+    largeobject_oid OID         NOT NULL,
+    created_at      TIMESTAMPTZ      DEFAULT NOW()
 );
 
 CREATE TABLE user_sessions
@@ -30,7 +30,6 @@ CREATE TABLE user_sessions
     expires_at    TIMESTAMPTZ NOT NULL,
     created_at    TIMESTAMPTZ      DEFAULT NOW()
 );
-
 
 -- +goose Down
 DROP TABLE IF EXISTS user_sessions;

@@ -5,27 +5,34 @@ import (
 	"Gault/internal/db"
 	wire "Gault/internal/injector"
 	"Gault/internal/server"
-	"Gault/pkg/logger"
 	"log"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run запуск сервера
+func run() error {
 	err := wire.InitializeLogger()
 	if err != nil {
-		log.Fatalf("failed to init logger: %v", err)
+		return err
 	}
 
 	conf, err := config.ParseConfig("server_config")
 	if err != nil {
-		logger.LogFatal(err.Error())
+		return err
 	}
 
 	store, err := db.InitializePostgresDB(conf.DB)
 	if err != nil {
-		logger.LogFatal(err.Error())
+		return err
 	}
 
 	if err = server.Run(conf.Port, conf.AllowEndpoints, store); err != nil {
-		logger.LogFatal(err.Error())
+		return err
 	}
+	return nil
 }

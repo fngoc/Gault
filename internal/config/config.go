@@ -14,6 +14,7 @@ type Config struct {
 	AllowEndpoints []EndpointRule `mapstructure:"allowEndpoints"`
 }
 
+// EndpointRule доступность ручек
 type EndpointRule struct {
 	Path    string `mapstructure:"path"`
 	Allowed bool   `mapstructure:"allowed"`

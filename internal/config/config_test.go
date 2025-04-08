@@ -26,7 +26,7 @@ func TestParseConfig_UnmarshalFailure(t *testing.T) {
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 
-	// Некорректная структура: массив вместо объектов
+	// Некорректная структура
 	content := `
 port:
   - not_a_number

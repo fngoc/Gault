@@ -1,13 +1,14 @@
 package main
 
 import (
-	"Gault/cmd/client/ui"
+	"Gault/internal/client"
 	"Gault/internal/config"
 	wire "Gault/internal/injector"
 	"Gault/pkg/logger"
 	"fmt"
 	"log"
 
+	"github.com/rivo/tview"
 	"google.golang.org/grpc"
 )
 
@@ -17,9 +18,16 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run запуск клиента
+func run() error {
 	err := wire.InitializeLogger()
 	if err != nil {
-		log.Fatalf("failed to init logger: %v", err)
+		return err
 	}
 
 	logger.LogInfo("Starting client")
@@ -27,13 +35,13 @@ func main() {
 
 	conf, err := config.ParseConfig("client_config")
 	if err != nil {
-		logger.LogFatal(err.Error())
+		return err
 	}
 
 	var conn *grpc.ClientConn
 	go func() {
 		var err error
-		conn, err = ui.GrpcClient(conf.Port)
+		conn, err = client.GrpcClient(conf.Port)
 		if err != nil {
 			logger.LogFatal(err.Error())
 		}
@@ -43,7 +51,9 @@ func main() {
 		defer conn.Close()
 	}
 
-	if err := ui.TUIClient(); err != nil {
-		logger.LogFatal(err.Error())
+	app := tview.NewApplication()
+	if err = client.TUIClientWithApp(app); err != nil {
+		return err
 	}
+	return nil
 }
