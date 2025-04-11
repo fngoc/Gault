@@ -28,7 +28,15 @@ func ParseConfig(nameConfig string) (Config, error) {
 	viper.AddConfigPath(".")
 
 	if err := viper.ReadInConfig(); err != nil {
-		return Config{}, fmt.Errorf("failed to read config: %w", err)
+		logger.LogInfo("config not found, using defaults port [8080], DB config and allow Login/Registration endpoints")
+		return Config{
+			Port: 8080,
+			DB:   "host=localhost user=postgres password=postgres dbname=test_db sslmode=disable",
+			AllowEndpoints: []EndpointRule{
+				{Path: "/api.proto.v1.AuthV1Service/Login", Allowed: true},
+				{Path: "/api.proto.v1.AuthV1Service/Registration", Allowed: true},
+			},
+		}, nil
 	}
 
 	if err := viper.Unmarshal(&conf); err != nil {

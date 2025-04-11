@@ -1,7 +1,10 @@
 package utils
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 
@@ -23,4 +26,32 @@ func TestGenerateToken(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, token)
 	})
+}
+
+func TestHashPassword_Error(t *testing.T) {
+	// сохраняем оригинал, чтобы потом вернуть
+	original := generateFromPassword
+	defer func() { generateFromPassword = original }()
+
+	// подмена зависимости
+	generateFromPassword = func(_ []byte, _ int) ([]byte, error) {
+		return nil, errors.New("bcrypt fail")
+	}
+
+	_, err := HashPassword("test123")
+	require.EqualError(t, err, "bcrypt fail")
+}
+
+func TestGenerateToken_Error(t *testing.T) {
+	// сохраняем оригинал
+	orig := randomReader
+	defer func() { randomReader = orig }()
+
+	// подменяем на фейл
+	randomReader = func(_ []byte) (int, error) {
+		return 0, errors.New("random fail")
+	}
+
+	_, err := GenerateToken()
+	require.EqualError(t, err, "random fail")
 }

@@ -66,7 +66,14 @@ jobs:
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
 
-          go build -o gault-$GOOS-$GOARCH \
+          FILENAME="gault-$GOOS-$GOARCH"
+          if [ "$GOOS" = "windows" ]; then
+            FILENAME="$FILENAME.exe"
+          fi
+
+          echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+
+          go build -o "$FILENAME" \
             -ldflags "-X main.Version=$VERSION -X main.BuildDate=$BUILD_DATE" \
             ./cmd/client/
 
@@ -74,4 +81,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.goos }}-${{ matrix.goarch }}
-          path: gault-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ env.FILENAME }}
