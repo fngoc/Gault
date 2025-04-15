@@ -640,8 +640,6 @@ func TestGetData_NotFoundError(t *testing.T) {
 	mock.ExpectQuery(`SELECT data_type, data_name, largeobject_oid FROM user_data WHERE id = \$1`).
 		WillReturnError(sql.ErrNoRows)
 
-	mock.ExpectRollback()
-
 	resp, err := store.GetData(ctx, "nonexistent-id")
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -664,8 +662,6 @@ func TestGetData_loOpenError(t *testing.T) {
 	mock.ExpectQuery(`SELECT lo_open\(\$1, 131072\)`).
 		WithArgs(123).
 		WillReturnError(errors.New("lo_open failed"))
-
-	mock.ExpectRollback()
 
 	resp, err := store.GetData(ctx, "some-id")
 	assert.Error(t, err)

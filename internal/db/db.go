@@ -53,12 +53,6 @@ func (s *Store) GetData(ctx context.Context, id string) (*pb.GetDataResponse, er
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
-	defer func(tx *sql.Tx) {
-		err := tx.Rollback()
-		if err != nil {
-			panic(err)
-		}
-	}(tx)
 
 	q := sqlc.New(tx)
 	info, err := q.GetDataInfoByID(ctxDB, stringToNullUUID(id).UUID)

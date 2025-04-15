@@ -16,3 +16,9 @@ func TestLogInfo(t *testing.T) {
 	assert.NoError(t, err)
 	LogInfo("test_message")
 }
+
+func TestLogError(t *testing.T) {
+	err := NewLogger()
+	assert.NoError(t, err)
+	LogError("test_message")
+}

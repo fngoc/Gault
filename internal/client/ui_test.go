@@ -33,6 +33,9 @@ type fakeDataClient struct {
 }
 
 func (f *fakeDataClient) SaveData(ctx context.Context, opts ...grpc.CallOption) (pb.ContentManagerV1Service_SaveDataClient, error) {
+	if f.returnErr != nil {
+		return nil, f.returnErr
+	}
 	if f.saveDataCreateStreamErr != nil {
 		return nil, f.saveDataCreateStreamErr
 	}
@@ -248,6 +251,75 @@ func TestShowItemDataDialog_File(t *testing.T) {
 	showItemDataDialog(app, "userID", "token", "file", table, message)
 }
 
+func TestShowItemDataDialog_Password(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		getDataResp: &pb.GetDataResponse{
+			Type: "password",
+			Content: &pb.GetDataResponse_FileData{
+				FileData: []byte("data..."),
+			},
+		},
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showItemDataDialog(app, "userID", "token", "file", table, message)
+}
+
+func TestShowItemDataDialog_Card(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		getDataResp: &pb.GetDataResponse{
+			Type: "card",
+			Content: &pb.GetDataResponse_FileData{
+				FileData: []byte("data..."),
+			},
+		},
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showItemDataDialog(app, "userID", "token", "file", table, message)
+}
+
+func TestShowItemDataDialog_Default(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		getDataResp: &pb.GetDataResponse{
+			Type: "test",
+			Content: &pb.GetDataResponse_FileData{
+				FileData: []byte("data..."),
+			},
+		},
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showItemDataDialog(app, "userID", "token", "file", table, message)
+}
+
 func TestShowItemDataDialog_Error(t *testing.T) {
 	app := tview.NewApplication()
 	table := tview.NewTable()
@@ -350,6 +422,135 @@ func TestShowEditTextDialog_UpdateError(t *testing.T) {
 		}
 	}()
 	showEditTextDialog(app, "userX", "tokenY", "itemABC", "text", table, message)
+
+	_, primitive := pages.GetFrontPage()
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	input, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	input.SetText("fail case")
+}
+
+func TestShowEditPasswordDialog_Success(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showEditPasswordDialog(app, "user1", "token1", "item123", "old text", table, message)
+
+	pageName, primitive := pages.GetFrontPage()
+	assert.Equal(t, "dialog_edit_text", pageName)
+
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	input, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+
+	newText := "new edited text"
+	input.SetText(newText)
+}
+
+func TestShowEditPasswordDialog_UpdateError(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		returnErr: errors.New("update failed"),
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showEditPasswordDialog(app, "userX", "tokenY", "itemABC", "text", table, message)
+
+	_, primitive := pages.GetFrontPage()
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	input, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	input.SetText("fail case")
+}
+
+func TestShowEditCardDialog_Success(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showEditCardDialog(app, "user1", "token1", "item123", "old text", table, message)
+
+	pageName, primitive := pages.GetFrontPage()
+	assert.Equal(t, "dialog_edit_text", pageName)
+
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	input, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+
+	newText := "new edited text"
+	input.SetText(newText)
+}
+
+func TestShowEditCardDialog_UpdateError(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		returnErr: errors.New("update failed"),
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showEditCardDialog(app, "userX", "tokenY", "itemABC", "text", table, message)
+
+	_, primitive := pages.GetFrontPage()
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	input, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	input.SetText("fail case")
+}
+
+func TestShowFileContentModal(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{
+		returnErr: errors.New("update failed"),
+	}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showFileContentModal(app, "userX", "tokenY", "itemABC", []byte(""), table, message)
 
 	_, primitive := pages.GetFrontPage()
 	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
@@ -480,6 +681,118 @@ func TestShowAddTextDialog_SaveError(t *testing.T) {
 	textField.SetText("nope")
 }
 
+func TestShowAddLoginPasswordDialog_Success(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showAddLoginPasswordDialog(app, "user1", "token1", message, table)
+
+	pageName, primitive := pages.GetFrontPage()
+	assert.Equal(t, "dialog_add_text", pageName)
+
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	nameField, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	textField, ok := form.GetFormItem(1).(*tview.InputField)
+	assert.True(t, ok)
+
+	nameField.SetText("entry1")
+	textField.SetText("This is some text")
+}
+
+func TestShowAddLoginPasswordDialog_SaveError(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("can't save")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showAddLoginPasswordDialog(app, "userX", "tokenY", message, table)
+
+	_, primitive := pages.GetFrontPage()
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	nameField, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	textField, ok := form.GetFormItem(1).(*tview.InputField)
+	assert.True(t, ok)
+
+	nameField.SetText("fail")
+	textField.SetText("nope")
+}
+
+func TestShowAddCardDialog_Success(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showAddCardDialog(app, "user1", "token1", message, table)
+
+	pageName, primitive := pages.GetFrontPage()
+	assert.Equal(t, "dialog_add_text", pageName)
+
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	nameField, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	textField, ok := form.GetFormItem(1).(*tview.InputField)
+	assert.True(t, ok)
+
+	nameField.SetText("entry1")
+	textField.SetText("This is some text")
+}
+
+func TestShowAddCardDialog_SaveError(t *testing.T) {
+	app := tview.NewApplication()
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("can't save")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	showAddCardDialog(app, "userX", "tokenY", message, table)
+
+	_, primitive := pages.GetFrontPage()
+	form, ok := primitive.(*tview.Flex).GetItem(0).(*tview.Form)
+	assert.True(t, ok)
+	nameField, ok := form.GetFormItem(0).(*tview.InputField)
+	assert.True(t, ok)
+	textField, ok := form.GetFormItem(1).(*tview.InputField)
+	assert.True(t, ok)
+
+	nameField.SetText("fail")
+	textField.SetText("nope")
+}
+
 func TestShowDataScreen_Success(t *testing.T) {
 	app := tview.NewApplication()
 	message := tview.NewTextView()
@@ -519,7 +832,7 @@ func TestShowDataScreen_LoadError(t *testing.T) {
 
 func TestShowLoginMenu_LoginSuccess(t *testing.T) {
 	app := tview.NewApplication()
-	showLoginMenu(app)
+	showLoginMenu(app, "ase")
 }
 
 func TestLogin_Success(t *testing.T) {
@@ -776,6 +1089,66 @@ func TestUpdateText_Error(t *testing.T) {
 	updateText("new content", "user2", "tokenX", "item999", table, message)
 }
 
+func TestUpdatePass_Success(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	updatePass("updated text here", "user1", "token1", "item123", table, message)
+}
+
+func TestUpdatePass_Error(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("db write error")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	updatePass("new content", "user2", "tokenX", "item999", table, message)
+}
+
+func TestUpdateCard_Success(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	updateCard("updated text here", "user1", "token1", "item123", table, message)
+}
+
+func TestUpdateCard_Error(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("db write error")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	updateCard("new content", "user2", "tokenX", "item999", table, message)
+}
+
 func TestDeleteText_Success(t *testing.T) {
 	table := tview.NewTable()
 	message := tview.NewTextView()
@@ -898,6 +1271,66 @@ func TestSaveText_Error(t *testing.T) {
 	saveText("oops", "fail.txt", "userX", "tokenX", table, message)
 }
 
+func TestSaveLoginAndPassword_Success(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	saveLoginAndPassword("my content", "note.txt", "user1", "token123", table, message)
+}
+
+func TestSaveLoginAndPassword_Error(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("disk full")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	saveLoginAndPassword("oops", "fail.txt", "userX", "tokenX", table, message)
+}
+
+func TestSaveCard_Success(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	saveCard("my content", "note.txt", "user1", "token123", table, message)
+}
+
+func TestSaveCard_Error(t *testing.T) {
+	table := tview.NewTable()
+	message := tview.NewTextView()
+
+	client := &fakeDataClient{returnErr: errors.New("disk full")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	saveCard("oops", "fail.txt", "userX", "tokenX", table, message)
+}
+
 func TestSendBigFileToServer_Success(t *testing.T) {
 	tmpFile, err := os.CreateTemp("", "bigfile-test-*.bin")
 	assert.NoError(t, err)
@@ -911,7 +1344,7 @@ func TestSendBigFileToServer_Success(t *testing.T) {
 	client := &fakeDataClient{}
 	dataClient = client
 
-	err = sendBigFileToServer(context.Background(), tmpFile.Name(), "user123", "file", "myfile.txt")
+	err = sendSaveBigFileToServer(context.Background(), tmpFile.Name(), "user123", "file", "myfile.txt")
 	assert.NoError(t, err)
 
 	assert.Len(t, client.receivedChunks, 1)
@@ -925,7 +1358,7 @@ func TestSendBigFileToServer_OpenFileError(t *testing.T) {
 	client := &fakeDataClient{}
 	dataClient = client
 
-	err := sendBigFileToServer(context.Background(), "/no/such/path.bin", "u", "t", "n")
+	err := sendSaveBigFileToServer(context.Background(), "/no/such/path.bin", "u", "t", "n")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to open file")
 	assert.Empty(t, client.receivedChunks)
@@ -941,7 +1374,7 @@ func TestSendBigFileToServer_CreateStreamError(t *testing.T) {
 	assert.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
 
-	err = sendBigFileToServer(context.Background(), tmpFile.Name(), "user123", "file", "myfile")
+	err = sendSaveBigFileToServer(context.Background(), tmpFile.Name(), "user123", "file", "myfile")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "could not create stream: stream creation failed")
 	assert.Empty(t, client.receivedChunks)
@@ -961,7 +1394,7 @@ func TestSendBigFileToServer_SendChunkError(t *testing.T) {
 	assert.NoError(t, err)
 	tmpFile.Close()
 
-	err = sendBigFileToServer(context.Background(), tmpFile.Name(), "u", "t", "n")
+	err = sendSaveBigFileToServer(context.Background(), tmpFile.Name(), "u", "t", "n")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "send chunk error")
 }
@@ -980,8 +1413,50 @@ func TestSendBigFileToServer_CloseAndRecvError(t *testing.T) {
 	assert.NoError(t, err)
 	tmpFile.Close()
 
-	err = sendBigFileToServer(context.Background(), tmpFile.Name(), "userX", "typeX", "nameX")
+	err = sendSaveBigFileToServer(context.Background(), tmpFile.Name(), "userX", "typeX", "nameX")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "CloseAndRecv error: final ack error")
 	assert.NotEmpty(t, client.receivedChunks)
+}
+
+func TestSendUpdateEncryptToServer(t *testing.T) {
+	aes = "1234567891234567"
+	client := &fakeDataClient{returnErr: nil}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	err := sendUpdateTextToServer(context.Background(), "userID", "dataType", "itemID", []byte("dataText"), true)
+	assert.NoError(t, err)
+}
+
+func TestSendEncryptToServerToServer(t *testing.T) {
+	aes = "1234567891234567"
+	client := &fakeDataClient{returnErr: nil}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	err := sendSaveTextToServer(context.Background(), "userID", "dataType", "itemID", []byte("dataText"), true)
+	assert.NoError(t, err)
+}
+
+func TestSendEncryptToServerToServer_Error(t *testing.T) {
+	aes = "1234567891234567"
+	client := &fakeDataClient{returnErr: errors.New("final error")}
+	dataClient = client
+
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered from panic for TUI")
+		}
+	}()
+	err := sendSaveTextToServer(context.Background(), "userID", "dataType", "itemID", []byte("dataText"), true)
+	assert.Error(t, err)
 }

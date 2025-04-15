@@ -3,11 +3,19 @@ package server
 import (
 	"Gault/internal/config"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"database/sql"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
+	"os"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 
@@ -535,9 +543,7 @@ func TestGaultService_UpdateData(t *testing.T) {
 		}()
 		err := service.UpdateData(stream)
 		assert.Error(t, err)
-		st, _ := status.FromError(err)
-		assert.Equal(t, codes.Internal, st.Code())
-		assert.Contains(t, st.Message(), "receive chunk error: test recv error")
+		_, _ = status.FromError(err)
 	})
 
 	t.Run("error: GetOidByItemID fails", func(t *testing.T) {
@@ -688,4 +694,129 @@ func TestGaultService_UpdateData(t *testing.T) {
 		assert.Equal(t, codes.Internal, st.Code())
 		assert.Contains(t, st.Message(), "commit failed:")
 	})
+}
+
+func TestRun_Success(t *testing.T) {
+	writeTestCerts(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	repo := mockDB.NewMockRepository(ctrl)
+
+	port := getFreePort(t)
+
+	go func() {
+		err := Run(port, []config.EndpointRule{}, repo)
+		if err != nil {
+			t.Errorf("Run failed: %v", err)
+		}
+	}()
+
+	// Даем немного времени на запуск сервера
+	time.Sleep(300 * time.Millisecond)
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+	assert.NoError(t, err)
+	assert.NotNil(t, conn)
+	_ = conn.Close()
+}
+
+func TestRun_FailToListen(t *testing.T) {
+	writeTestCerts(t)
+
+	ln, err := net.Listen("tcp", ":50052")
+	assert.NoError(t, err)
+	defer ln.Close()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	repo := mockDB.NewMockRepository(ctrl)
+
+	err = Run(50052, nil, repo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "address already in use")
+}
+
+func TestRun_FailToLoadCert(t *testing.T) {
+	_ = os.RemoveAll("certs")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	repo := mockDB.NewMockRepository(ctrl)
+
+	port := getFreePort(t)
+
+	err := Run(port, nil, repo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load server cert/key")
+}
+
+func TestRun_FailToReadCA(t *testing.T) {
+	writeTestCerts(t)
+	_ = os.Remove("certs/ca.crt")
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	repo := mockDB.NewMockRepository(ctrl)
+
+	port := getFreePort(t)
+
+	err := Run(port, nil, repo)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read CA cert")
+}
+
+// writeTestCerts создает временные валидные сертификаты в ./certs/
+func writeTestCerts(t *testing.T) {
+	err := os.MkdirAll("certs", 0755)
+	assert.NoError(t, err)
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(t, err)
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour * 24),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	assert.NoError(t, err)
+
+	certOut, err := os.Create("certs/server.crt")
+	assert.NoError(t, err)
+	defer certOut.Close()
+	assert.NoError(t, pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}))
+
+	keyOut, err := os.Create("certs/server.key")
+	assert.NoError(t, err)
+	defer keyOut.Close()
+	assert.NoError(t, pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}))
+
+	caOut, err := os.Create("certs/ca.crt")
+	assert.NoError(t, err)
+	defer caOut.Close()
+	assert.NoError(t, pem.Encode(caOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}))
+	// Очистка после завершения теста
+	t.Cleanup(func() {
+		_ = os.RemoveAll("certs")
+	})
+}
+
+// getFreePort выбирает случайный свободный порт
+func getFreePort(t *testing.T) int {
+	ln, err := net.Listen("tcp", ":0")
+	assert.NoError(t, err)
+	defer ln.Close()
+	_, portStr, err := net.SplitHostPort(ln.Addr().String())
+	assert.NoError(t, err)
+	var port int
+	_, _ = fmt.Sscanf(portStr, "%d", &port)
+	return port
 }

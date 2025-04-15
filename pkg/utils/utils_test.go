@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/base64"
 	"errors"
 	"testing"
 
@@ -54,4 +55,54 @@ func TestGenerateToken_Error(t *testing.T) {
 
 	_, err := GenerateToken()
 	require.EqualError(t, err, "random fail")
+}
+
+const validKey = "1234567890123456" // AES-128 требует 16 байт ключа
+
+func TestEncryptDecrypt_Success(t *testing.T) {
+	plain := "Hello"
+	encrypted, err := Encrypt(plain, validKey)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, encrypted)
+
+	decrypted, err := Decrypt(encrypted, validKey)
+	assert.NoError(t, err)
+	assert.Equal(t, plain, decrypted)
+}
+
+func TestEncrypt_InvalidKeyLength(t *testing.T) {
+	shortKey := "short"
+	_, err := Encrypt("text", shortKey)
+	assert.Error(t, err)
+}
+
+func TestDecrypt_InvalidBase64(t *testing.T) {
+	_, err := Decrypt("!!!not-base64!!!", validKey)
+	assert.Error(t, err)
+}
+
+func TestDecrypt_InvalidKeyLength(t *testing.T) {
+	plain := "Test data"
+	encrypted, err := Encrypt(plain, validKey)
+	assert.NoError(t, err)
+
+	_, err = Decrypt(encrypted, "badkey")
+	assert.Error(t, err)
+}
+
+func TestDecrypt_InvalidCipherData(t *testing.T) {
+	data := base64.StdEncoding.EncodeToString([]byte("short"))
+	_, err := Decrypt(data, validKey)
+	assert.Error(t, err)
+}
+
+func TestDecrypt_TamperedCipherText(t *testing.T) {
+	plain := "Hello!"
+	encrypted, err := Encrypt(plain, validKey)
+	assert.NoError(t, err)
+
+	// Порча зашифрованного текста
+	tampered := encrypted + "123"
+	_, err = Decrypt(tampered, validKey)
+	assert.Error(t, err)
 }

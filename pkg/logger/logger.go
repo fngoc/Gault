@@ -32,6 +32,11 @@ func LogInfo(msg string) {
 	log.Info(msg)
 }
 
+// LogError логирование с уровнем error
+func LogError(msg string) {
+	log.Error(msg)
+}
+
 // LogFatal логирование с завершением программы
 func LogFatal(msg string) {
 	log.Fatal(msg)

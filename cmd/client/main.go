@@ -5,6 +5,7 @@ import (
 	"Gault/internal/config"
 	wire "Gault/internal/injector"
 	"Gault/pkg/logger"
+	"flag"
 	"fmt"
 	"log"
 
@@ -25,6 +26,14 @@ func main() {
 
 // run запуск клиента
 func run() error {
+	versionFlag := flag.Bool("version", false, "Print version and exit")
+	flag.Parse()
+
+	if *versionFlag {
+		fmt.Printf("Version: %s\nBuild date: %s\n", Version, BuildDate)
+		return nil
+	}
+
 	err := wire.InitializeLogger()
 	if err != nil {
 		return err
@@ -52,7 +61,7 @@ func run() error {
 	}
 
 	app := tview.NewApplication()
-	if err = client.TUIClientWithApp(app); err != nil {
+	if err = client.TUIClientWithApp(app, conf.Aes); err != nil {
 		return err
 	}
 	return nil

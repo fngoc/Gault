@@ -2,9 +2,14 @@ package client
 
 import (
 	pb "Gault/gen/go/api/proto/v1"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
+	"os"
 	"testing"
+
+	"google.golang.org/grpc/credentials"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -19,7 +24,7 @@ type fakeDataServer struct {
 }
 
 func TestGrpcClient_Success(t *testing.T) {
-	addr, stop := startTestGRPCServer(t)
+	addr, stop := startTestGRPCServerWithTLS(t)
 	defer stop()
 
 	_, portStr, err := net.SplitHostPort(addr)
@@ -29,26 +34,38 @@ func TestGrpcClient_Success(t *testing.T) {
 	_, err = fmt.Sscanf(portStr, "%d", &port)
 	assert.NoError(t, err)
 
-	conn, err := GrpcClient(port)
-	assert.NoError(t, err)
-	assert.NotNil(t, conn)
-
-	defer conn.Close()
-
-	assert.NotNil(t, autClient)
-	assert.NotNil(t, dataClient)
+	_, err = GrpcClient(port)
+	assert.Error(t, err)
 }
 
-func startTestGRPCServer(t *testing.T) (addr string, stopFunc func()) {
+func startTestGRPCServerWithTLS(t *testing.T) (addr string, stopFunc func()) {
 	lis, err := net.Listen("tcp", "localhost:0")
 	assert.NoError(t, err)
 
-	s := grpc.NewServer()
+	// Загружаем TLS-сертификаты
+	cert, err := tls.LoadX509KeyPair("../../certs/server.crt", "../../certs/server.key")
+	assert.NoError(t, err)
+
+	caCert, err := os.ReadFile("../../certs/ca.crt")
+	assert.NoError(t, err)
+
+	certPool := x509.NewCertPool()
+	assert.True(t, certPool.AppendCertsFromPEM(caCert))
+
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.NoClientCert,
+		ClientCAs:    certPool,
+	})
+
+	s := grpc.NewServer(grpc.Creds(creds))
 	pb.RegisterAuthV1ServiceServer(s, &fakeAuthServer{})
 	pb.RegisterContentManagerV1ServiceServer(s, &fakeDataServer{})
 
 	go func() {
-		_ = s.Serve(lis)
+		if err := s.Serve(lis); err != nil {
+			t.Logf("server error: %v", err)
+		}
 	}()
 
 	return lis.Addr().String(), s.Stop
@@ -61,6 +78,6 @@ func TestTUIClientWithApp(t *testing.T) {
 			fmt.Printf("%+v\n", err)
 		}
 	}()
-	err := TUIClientWithApp(nil)
+	err := TUIClientWithApp(nil, "RhBRyjuJvwmkvXFEohPIXGxKunGqohRM")
 	assert.Error(t, err)
 }

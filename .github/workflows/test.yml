@@ -48,6 +48,10 @@ jobs:
         run: |
           cd internal/injector && wire
 
+      - name: Generate certs for tests
+        run: |
+          make tls
+
       - name: Run tests
         run: |
           go test -covermode=atomic -coverprofile=coverage.out ./...

@@ -6,10 +6,14 @@ import (
 	"Gault/pkg/logger"
 	"Gault/pkg/utils"
 	"context"
-	"database/sql"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
+	"os"
+
+	"google.golang.org/grpc/credentials"
 
 	"github.com/google/uuid"
 
@@ -100,12 +104,6 @@ func (g *GaultService) SaveData(stream pb.ContentManagerV1Service_SaveDataServer
 	if err != nil {
 		return status.Errorf(codes.Internal, "begin tx failed: %v", err)
 	}
-	defer func(tx *sql.Tx) {
-		err := tx.Rollback()
-		if err != nil {
-			panic(err)
-		}
-	}(tx)
 
 	// Создаём пустой Large Object
 	oid, err := g.rep.CreateEmptyLO(ctx, tx)
@@ -204,12 +202,6 @@ func (g *GaultService) UpdateData(stream pb.ContentManagerV1Service_UpdateDataSe
 	if err != nil {
 		return status.Errorf(codes.Internal, "begin tx failed: %v", err)
 	}
-	defer func(tx *sql.Tx) {
-		err := tx.Rollback()
-		if err != nil {
-			panic(err)
-		}
-	}(tx)
 
 	firstReq, recvErr := stream.Recv()
 	if recvErr == io.EOF {
@@ -306,22 +298,43 @@ func Run(port int, unprotectedMethods []config.EndpointRule, store db.Repository
 		return err
 	}
 
-	gaultServer = &GaultService{rep: store}
+	// Загрузка TLS-сертификата и ключа
+	cert, err := tls.LoadX509KeyPair("certs/server.crt", "certs/server.key")
+	if err != nil {
+		return fmt.Errorf("failed to load server cert/key: %w", err)
+	}
 
-	setAllowEndpoints(unprotectedMethods)
+	// Подгружаем CA для валидации клиента
+	certPool := x509.NewCertPool()
+	ca, err := os.ReadFile("certs/ca.crt")
+	if err != nil {
+		return fmt.Errorf("failed to read CA cert: %w", err)
+	}
+	certPool.AppendCertsFromPEM(ca)
 
-	// Увеличенные лимиты для входящих/исходящих сообщений (100 GB)
+	// Настройки TLS
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.NoClientCert,
+		ClientCAs:    certPool,
+	})
+
+	// Параметры gRPC-сервера
 	serverOptions := []grpc.ServerOption{
+		grpc.Creds(creds),
 		grpc.UnaryInterceptor(AuthInterceptor),
 		grpc.MaxRecvMsgSize(1024 * 1024 * 1024 * 100),
 		grpc.MaxSendMsgSize(1024 * 1024 * 1024 * 100),
 	}
 
 	s := grpc.NewServer(serverOptions...)
+	gaultServer = &GaultService{rep: store}
+	setAllowEndpoints(unprotectedMethods)
+
 	pb.RegisterAuthV1ServiceServer(s, gaultServer)
 	pb.RegisterContentManagerV1ServiceServer(s, gaultServer)
 
-	logger.LogInfo("start gRPC server")
+	logger.LogInfo("start gRPC server with TLS")
 	if err = s.Serve(listen); err != nil {
 		return err
 	}

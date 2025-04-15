@@ -10,6 +10,7 @@ import (
 // Config структура файла конфигурации
 type Config struct {
 	Port           int            `mapstructure:"port" default:"8080"`
+	Aes            string         `mapstructure:"aes" default:"00000000000000000000000000000000"`
 	DB             string         `mapstructure:"db" default:"host=localhost user=postgres password=postgres dbname=test_db sslmode=disable"`
 	AllowEndpoints []EndpointRule `mapstructure:"allowEndpoints"`
 }
@@ -31,6 +32,7 @@ func ParseConfig(nameConfig string) (Config, error) {
 		logger.LogInfo("config not found, using defaults port [8080], DB config and allow Login/Registration endpoints")
 		return Config{
 			Port: 8080,
+			Aes:  "00000000000000000000000000000000",
 			DB:   "host=localhost user=postgres password=postgres dbname=test_db sslmode=disable",
 			AllowEndpoints: []EndpointRule{
 				{Path: "/api.proto.v1.AuthV1Service/Login", Allowed: true},
