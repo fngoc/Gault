@@ -40,7 +40,7 @@ func (g *GaultService) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Log
 		return nil, err
 	}
 	if !isCreate {
-		return nil, status.Errorf(codes.PermissionDenied, "login failed")
+		return nil, status.Errorf(codes.PermissionDenied, "login failed, not valid credentials")
 	}
 
 	userUID, token, err := g.rep.UpdateSessionUser(ctx, req.GetLogin(), req.GetPassword())
