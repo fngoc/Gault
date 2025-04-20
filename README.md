@@ -4,6 +4,9 @@
 
 ---
 
+## Пример работы
+![Demo](assets/demo.gif)
+
 ## Сервер
 
 ### Сборка
@@ -15,7 +18,7 @@ make tls
 ### Запуск
 Поменять конфигурацию сервера можно в конфигурационном файле `server_config.yml`
 
-Запустите docker-compose который поднимет контейнер Postgres и контейнер сервера
+Запустите docker-compose который поднимет контейнер PostgreSQL и контейнер сервера
 ```bash
 docker compose -f docker-compose.yml -p gault up -d
 ```
