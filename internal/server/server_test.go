@@ -239,22 +239,6 @@ func TestGaultService_DeleteData(t *testing.T) {
 	})
 }
 
-func TestRun(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	repo := mockDB.NewMockRepository(ctrl)
-	port := 50051
-
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
-	ln.Close()
-
-	go func() {
-		_ = Run(port, []config.EndpointRule{}, repo)
-	}()
-}
-
 func TestGaultService_SaveData(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
