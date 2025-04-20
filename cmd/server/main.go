@@ -1,11 +1,12 @@
 package main
 
 import (
-	"Gault/internal/config"
-	"Gault/internal/db"
-	wire "Gault/internal/injector"
-	"Gault/internal/server"
 	"log"
+
+	"github.com/fngoc/gault/internal/config"
+	"github.com/fngoc/gault/internal/db"
+	wire "github.com/fngoc/gault/internal/injector"
+	"github.com/fngoc/gault/internal/server"
 )
 
 func main() {

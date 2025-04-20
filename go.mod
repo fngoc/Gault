@@ -1,4 +1,4 @@
-module Gault
+module github.com/fngoc/gault
 
 go 1.23.0
 

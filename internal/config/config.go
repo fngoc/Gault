@@ -1,8 +1,9 @@
 package config
 
 import (
-	"Gault/pkg/logger"
 	"fmt"
+
+	"github.com/fngoc/gault/pkg/logger"
 
 	"github.com/spf13/viper"
 )

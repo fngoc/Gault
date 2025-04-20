@@ -1,9 +1,10 @@
 package server
 
 import (
-	"Gault/internal/config"
 	"context"
 	"testing"
+
+	"github.com/fngoc/gault/internal/config"
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"

@@ -1,14 +1,15 @@
 package db
 
 import (
-	pb "Gault/gen/go/api/proto/v1"
-	sqlc "Gault/gen/go/db"
-	"Gault/pkg/logger"
-	"Gault/pkg/utils"
 	"context"
 	"database/sql"
 	"fmt"
 	"time"
+
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
+	sqlc "github.com/fngoc/gault/gen/go/db"
+	"github.com/fngoc/gault/pkg/logger"
+	"github.com/fngoc/gault/pkg/utils"
 
 	"github.com/google/uuid"
 	"github.com/pressly/goose"

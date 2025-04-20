@@ -1,10 +1,11 @@
 package server
 
 import (
-	"Gault/internal/config"
-	"Gault/pkg/logger"
 	"context"
 	"fmt"
+
+	"github.com/fngoc/gault/internal/config"
+	"github.com/fngoc/gault/pkg/logger"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

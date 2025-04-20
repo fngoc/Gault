@@ -1,10 +1,6 @@
 package server
 
 import (
-	"Gault/internal/config"
-	"Gault/internal/db"
-	"Gault/pkg/logger"
-	"Gault/pkg/utils"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -12,6 +8,11 @@ import (
 	"io"
 	"net"
 	"os"
+
+	"github.com/fngoc/gault/internal/config"
+	"github.com/fngoc/gault/internal/db"
+	"github.com/fngoc/gault/pkg/logger"
+	"github.com/fngoc/gault/pkg/utils"
 
 	"google.golang.org/grpc/credentials"
 
@@ -23,7 +24,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	pb "Gault/gen/go/api/proto/v1"
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 )
 
 // GaultService сервис взаимодействия с базой данных

@@ -1,12 +1,14 @@
 package client
 
 import (
-	pb "Gault/gen/go/api/proto/v1"
-	"Gault/pkg/utils"
 	"context"
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/fngoc/gault/pkg/utils"
+
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 )
 
 // sendSaveTextToServer отправляет текст через SaveData

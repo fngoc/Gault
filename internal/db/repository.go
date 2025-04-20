@@ -1,9 +1,10 @@
 package db
 
 import (
-	pb "Gault/gen/go/api/proto/v1"
 	"context"
 	"database/sql"
+
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 )
 
 // Repository интерфейс взаимодействия с хранилищем

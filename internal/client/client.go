@@ -1,11 +1,12 @@
 package client
 
 import (
-	pb "Gault/gen/go/api/proto/v1"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"os"
+
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 
 	"google.golang.org/grpc/credentials"
 

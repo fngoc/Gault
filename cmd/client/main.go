@@ -1,13 +1,14 @@
 package main
 
 import (
-	"Gault/internal/client"
-	"Gault/internal/config"
-	wire "Gault/internal/injector"
-	"Gault/pkg/logger"
 	"flag"
 	"fmt"
 	"log"
+
+	"github.com/fngoc/gault/internal/client"
+	"github.com/fngoc/gault/internal/config"
+	wire "github.com/fngoc/gault/internal/injector"
+	"github.com/fngoc/gault/pkg/logger"
 
 	"github.com/rivo/tview"
 	"google.golang.org/grpc"

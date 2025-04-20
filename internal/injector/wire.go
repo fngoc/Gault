@@ -4,7 +4,7 @@
 package injector
 
 import (
-	"Gault/pkg/logger"
+	"github.com/fngoc/gault/pkg/logger"
 
 	"github.com/google/wire"
 )

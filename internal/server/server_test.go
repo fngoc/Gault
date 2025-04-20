@@ -1,7 +1,6 @@
 package server
 
 import (
-	"Gault/internal/config"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -17,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fngoc/gault/internal/config"
+
 	"google.golang.org/grpc/codes"
 
 	"google.golang.org/grpc"
@@ -24,12 +25,12 @@ import (
 
 	"google.golang.org/grpc/metadata"
 
-	pb "Gault/gen/go/api/proto/v1"
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
-	mockDB "Gault/gen/go/db"
+	mockDB "github.com/fngoc/gault/gen/go/db"
 )
 
 // mockSaveDataServer заглушка, реализующая интерфейс ContentManagerV1Service_SaveDataServer

@@ -1,11 +1,13 @@
 package client
 
 import (
-	pb "Gault/gen/go/api/proto/v1"
-	"Gault/pkg/utils"
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/fngoc/gault/pkg/utils"
+
+	pb "github.com/fngoc/gault/gen/go/api/proto/v1"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
