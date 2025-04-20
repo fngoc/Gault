@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package api.proto.v1;
+
+import "api/proto/validate/validate.proto";
+import "third_party/google/api/annotations.proto";
+
+option go_package = "api/proton/v1";
+
+// gRPC-сервис для управления доступа к данным
+service ContentManagerV1Service {
+  // GetUserDataList функция обработчик получения листа информации о данных
+  rpc GetUserDataList(GetUserDataListRequest) returns (GetUserDataListResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/getDataList"
+      body: "*"
+    };
+  };
+  // GetData функция обработчик получения данных
+  rpc GetData(GetDataRequest) returns (GetDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/getData"
+      body: "*"
+    };
+  };
+  // SaveData функция обработчик сохранения данных
+  rpc SaveData(stream SaveDataRequest) returns (SaveDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/saveData"
+      body: "*"
+    };
+  };
+  // DeleteData функция обработчик удаления данных
+  rpc DeleteData(DeleteDataRequest) returns (DeleteDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/deleteData"
+      body: "*"
+    };
+  };
+  // UpdateData функция обновления данных
+  rpc UpdateData(stream UpdateDataRequest) returns (UpdateDataResponse) {
+    option (google.api.http) = {
+      post: "/v1/data/updateData"
+      body: "*"
+    };
+  };
+}
+
+// Запрос на получение листа информации о данных
+message GetUserDataListRequest {}
+
+// Ответ на получение листа информации о данных
+message GetUserDataListResponse {
+  repeated UserDataItem items = 1;
+}
+
+// Элемент ответа на получение листа информации о данных
+message UserDataItem {
+  string id = 1;
+  string name = 2 [(validate.rules).string = {min_len: 1, max_len: 128}];
+  string type = 3;
+}
+
+// Запрос на получение данных
+message GetDataRequest {
+  string id = 1;
+}
+
+// Ответ на получение данных
+message GetDataResponse {
+  string type = 1;
+  oneof content {
+    string text_data = 2;
+    bytes file_data = 3;
+  }
+}
+
+// Запрос на сохранение данных
+message SaveDataRequest {
+  string user_uid = 1;
+  string type = 2;
+  string name = 3 [(validate.rules).string = {min_len: 1, max_len: 128}];
+  bytes data = 4;
+
+  uint64 chunk_number = 5;
+  uint64 total_chunks = 6;
+}
+
+// Ответ на сохранение данных
+message SaveDataResponse {}
+
+// Запрос на удаление данных
+message DeleteDataRequest {
+  string id = 1;
+}
+
+// Ответ на удаление данных
+message DeleteDataResponse {}
+
+// Запрос на обновление данных
+message UpdateDataRequest {
+  string data_uid = 1;
+  string user_uid = 2;
+  string type = 3;
+  bytes data = 4;
+
+  uint64 chunk_number = 5;
+  uint64 total_chunks = 6;
+}
+
+// Ответ на обновление данных
+message UpdateDataResponse {}

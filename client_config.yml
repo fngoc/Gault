@@ -1,0 +1,2 @@
+port: 8080
+aes: "RwWYUOwrECajEbAgMvbzHVqYLCLpGwsb" # 32-битный AES ключ для шифрования

@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "db/schema.sql"
+    queries: "db/queries.sql"
+    gen:
+      go:
+        package: "db"
+        out: "gen/go/db"
+        overrides:
+          - db_type: oid
+            go_type: uint32
